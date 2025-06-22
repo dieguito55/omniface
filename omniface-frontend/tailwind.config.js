@@ -10,6 +10,7 @@ export default {
         poppins: ['Poppins', 'sans-serif'],
         quicksand: ['Quicksand', 'sans-serif'],
         firacode: ['"Fira Code"', 'monospace'],
+         irish: ['"Irish Grover"', 'cursive'],
       },
       keyframes: {
         'fade-in': {
