@@ -1,3 +1,4 @@
+// omniface-frontend/src/pages/GenerarModelo.jsx
 export default function GenerarModelo() {
   return (
     <div>

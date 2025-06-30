@@ -1,3 +1,4 @@
+// omniface-frontend/src/pages/Notificacion.jsx
 export default function Notificacion() {
   return (
     <div>

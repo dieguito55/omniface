@@ -1,3 +1,4 @@
+// omniface-frontend/src/pages/Configuracion.jsx
 export default function Configuracion() {
   return (
     <div>

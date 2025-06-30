@@ -1,3 +1,4 @@
+// omniface-frontend/src/pages/HistorialAsistencia.jsx
 export default function HistorialAsistencia() {
   return (
     <div>

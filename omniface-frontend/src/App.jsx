@@ -1,3 +1,4 @@
+// omniface-frontend/src/App.jsx
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Login from "./components/Login";
 import PanelAdministrador from "./components/PanelAdministrador";

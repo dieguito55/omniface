@@ -1,4 +1,4 @@
-// src/components/Sidebar.jsx
+// omniface-frontend/src/components/Sidebar.jsx
 import {
   FaHome, FaUserFriends, FaClock, FaCamera,
   FaHistory, FaCog, FaBell
@@ -72,7 +72,7 @@ export default function Sidebar({ vistaActual, cambiarVista, colapsado }) {
           <img src="/logo.png" alt="Logo" className={`${colapsado ? "h-10" : "h-14"} transition-all`} />
           {!colapsado && (
             <h1 className="ml-2 text-3xl font-extrabold font-irish text-white">
-              Omni<span className="text-yellow-400">face</span>
+              Omni<span className="text-blue-400">face</span>
             </h1>
           )}
         </div>
@@ -82,12 +82,12 @@ export default function Sidebar({ vistaActual, cambiarVista, colapsado }) {
           <img
             src={`/avatars/${usuario.imagen}`}
             alt="Usuario"
-            className="w-14 h-14 rounded-full border-[2.5px] border-yellow-300 shadow-md object-cover"
+            className="w-14 h-14 rounded-full border-[2.5px] border-blue-300 shadow-md object-cover"
           />
           {!colapsado && (
             <div>
               <p className="font-bold text-[16px] font-Poppins">Hola 👋</p>
-              <p className="text-[14px] text-yellow-200 font-Poppins">{textoAnimado}</p>
+              <p className="text-[14px] text-blue-200 font-Poppins">{textoAnimado}</p>
             </div>
           )}
           {/* Estado servidor */}
@@ -109,8 +109,8 @@ export default function Sidebar({ vistaActual, cambiarVista, colapsado }) {
               className={`relative group flex items-center ${colapsado ? "justify-center" : "justify-start"} gap-4 
                 px-6 py-4 text-[16px] font-Poppins cursor-pointer transition-all duration-300 ease-in-out
                 ${vistaActual === key
-                  ? "bg-yellow-400 text-black rounded-l-none rounded-r-full shadow-xl scale-105"
-                  : "hover:bg-yellow-200 hover:text-black hover:scale-[1.02] rounded-full text-white"
+                  ? "bg-blue-400 text-black rounded-l-none rounded-r-full shadow-xl scale-105"
+                  : "hover:bg-blue-200 hover:text-black hover:scale-[1.02] rounded-full text-white"
                 }`}
               onClick={() => cambiarVista(key)}
               data-tooltip-id="sidebar-tooltip"

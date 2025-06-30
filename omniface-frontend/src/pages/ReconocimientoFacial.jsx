@@ -1,3 +1,4 @@
+// omniface-frontend/src/pages/ReconocimientoFacial.jsx
 export default function ReconocimientoFacial() {
   return (
     <div>

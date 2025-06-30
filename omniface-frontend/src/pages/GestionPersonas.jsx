@@ -1,3 +1,4 @@
+// omniface-frontend/src/pages/GestionPersonas.jsx
 export default function GestionPersonas() {
   return (
     <div>

@@ -1,3 +1,4 @@
+// omniface-frontend/src/components/Topbar.jsx
 import { FaBars, FaHome, FaBell, FaCog, FaSignOutAlt } from "react-icons/fa";
 import { useEffect, useRef, useState } from "react";
 import api from "../api/api";
@@ -43,10 +44,10 @@ export default function Topbar({ titulo, toggleSidebar, cerrarSesion }) {
           title="Menú"
         />
         <span className="text-2xl font-semibold tracking-wide flex items-center gap-2">
-          <FaHome className="text-yellow-300" />
+          <FaHome className="text-blue-300" />
           <span className="text-white">Inicio</span>
-          <span className="text-yellow-300"> &gt; </span>
-          <span className="text-yellow-200">{titulo}</span>
+          <span className="text-blue-300"> &gt; </span>
+          <span className="text-blue-200">{titulo}</span>
         </span>
       </div>
 
@@ -54,7 +55,7 @@ export default function Topbar({ titulo, toggleSidebar, cerrarSesion }) {
       <div className="flex items-center gap-6 relative">
         {/* Icono de notificaciones */}
         <div className="relative cursor-pointer" title="Notificaciones">
-          <FaBell className="text-2xl hover:text-yellow-300 transition-colors" />
+          <FaBell className="text-2xl hover:text-blue-300 transition-colors" />
           <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 rounded-full animate-ping"></span>
           <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 rounded-full"></span>
         </div>
@@ -64,7 +65,7 @@ export default function Topbar({ titulo, toggleSidebar, cerrarSesion }) {
           <img
             src={`/avatars/${usuario.imagen}`}
             alt="Perfil"
-            className="w-11 h-11 rounded-full border-2 border-yellow-400 shadow-md cursor-pointer object-cover hover:scale-105 transition-transform"
+            className="w-11 h-11 rounded-full border-2 border-blue-400 shadow-md cursor-pointer object-cover hover:scale-105 transition-transform"
             onClick={() => setMenuAbierto(!menuAbierto)}
           />
 

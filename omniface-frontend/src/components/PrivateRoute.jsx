@@ -1,3 +1,4 @@
+// omniface-frontend/src/components/PrivateRoute.jsx
 import { useEffect, useState } from "react";
 import { Navigate, Outlet } from "react-router-dom";
 import api from "../api/api";

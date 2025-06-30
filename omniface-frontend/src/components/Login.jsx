@@ -1,3 +1,4 @@
+// omniface-frontend/src/components/Login.jsx
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "../api/api";
@@ -153,7 +154,15 @@ useEffect(() => {
 }
 
   return (
-  <div className="min-h-screen bg-[#2C2F4A] flex items-center justify-center p-4 font-poppins">
+  <div
+  className="min-h-screen bg-cover bg-center relative flex items-center justify-center p-4 font-poppins"
+  style={{ backgroundImage: "url('/fondo-login.jpg')" }} // Usa tu imagen
+>
+  {/* Capa desenfocada encima */}
+  <div className="absolute inset-0 bg-black/50 backdrop-blur-sm z-0"></div>
+
+  {/* Contenido encima del fondo desenfocado */}
+  <div className="relative z-10 w-full flex justify-center items-center">
      {esDesktop ? (
     <div className="relative w-full max-w-5xl h-[560px] bg-white shadow-2xl rounded-xl overflow-hidden">
       {/* Panel deslizante */}
@@ -217,8 +226,8 @@ useEffect(() => {
 >
         {/* Logo */}
         <div className="flex items-center mb-4">
-          <img src="/logo.png" alt="Omniface Logo" className="h-10 mr-1" />
-          <span className="text-2xl font-bold text-[#2C2F4A]">
+          <img src="/logo.png" alt="Omniface Logo" className="h-12 mr-1" />
+          <span className="text-3xl font-bold text-[#2C2F4A]">
             Omni<span className="text-blue-500">face</span>
           </span>
         </div>
@@ -489,5 +498,8 @@ useEffect(() => {
       </div>
 )}
   </div>
+  
+  </div> 
 );
+
 }

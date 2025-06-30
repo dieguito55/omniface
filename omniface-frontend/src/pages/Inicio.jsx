@@ -1,4 +1,4 @@
-// src/pages/Inicio.jsx
+// omniface-frontend/src/pages/Inicio.jsx
 export default function Inicio() {
   return (
     <div>
