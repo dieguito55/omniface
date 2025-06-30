@@ -1,4 +1,4 @@
-# ✅ src/main.py
+# ✅ omniface-backend/main.py
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from auth import auth_router
@@ -16,3 +16,4 @@ app.add_middleware(
 
 app.include_router(auth_router)
 app.include_router(usuarios_router)
+app.include_router(auth_router)  # 👈 Esto es lo que conecta las rutas

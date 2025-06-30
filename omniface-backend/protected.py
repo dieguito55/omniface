@@ -1,4 +1,4 @@
-# ✅ src/protected.py
+# ✅ omniface-backend/protected.py
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt

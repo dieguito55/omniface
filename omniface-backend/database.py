@@ -1,4 +1,4 @@
-# ✅ src/database.py
+# ✅ omniface-backend/database.py
 import mysql.connector
 
 def get_connection():

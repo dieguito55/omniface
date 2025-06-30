@@ -1,11 +1,11 @@
-# ✅ src/auth.py
+# ✅ omniface-backend/auth.py
 from fastapi import APIRouter, HTTPException, Request
 from database import get_connection
 from utils import (
     hash_password, verify_password,
     create_access_token, create_refresh_token, decode_token
 )
-from models import UsuarioRegistro, UsuarioLogin
+from models import UsuarioRegistro, UsuarioLoginzwh
 from jose.exceptions import JWTError
 
 auth_router = APIRouter(prefix="/auth", tags=["Autenticación"])

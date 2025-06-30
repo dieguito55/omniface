@@ -1,4 +1,4 @@
-# ✅ src/models.py
+# ✅ omniface-backend/models.py
 from pydantic import BaseModel, EmailStr
 
 class Usuario(BaseModel):
