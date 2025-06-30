@@ -5,7 +5,7 @@ from utils import (
     hash_password, verify_password,
     create_access_token, create_refresh_token, decode_token
 )
-from models import UsuarioRegistro, UsuarioLoginzwh
+from models import UsuarioRegistro, UsuarioLogin
 from jose.exceptions import JWTError
 
 auth_router = APIRouter(prefix="/auth", tags=["Autenticación"])
