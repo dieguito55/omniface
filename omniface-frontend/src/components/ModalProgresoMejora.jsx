@@ -56,7 +56,7 @@ export default function ModalProgresoMejora({ lista, onCompletar }) {
           {lista.map((img, i) => (
             <li key={i} className="flex items-center gap-4 bg-white/10 rounded-lg px-4 py-2">
               <img
-                src={`http://192.168.31.146:8000/imagenes_originales/${img}`}
+                src={`http://192.168.100.42:8000/imagenes_originales/${img}`}
                 alt="preview"
                 className="h-10 w-10 object-cover rounded-full border"
               />

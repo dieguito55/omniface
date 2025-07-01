@@ -190,7 +190,7 @@ const mejorarImagenes = async () => {
               <td>{p.nombre_completo}</td>
               <td>
                 <img
-                  src={`http://192.168.31.146:8000${p.imagen_url}`}
+                  src={`http://192.168.100.42:8000${p.imagen_url}`}
                   alt="foto"
                   className="h-16 w-16 object-cover rounded-full border shadow"
                 />
