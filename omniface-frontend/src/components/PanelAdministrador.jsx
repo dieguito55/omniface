@@ -93,6 +93,8 @@ export default function PanelAdministrador() {
   titulo={vistaActual}
   toggleSidebar={() => setSidebarColapsado(prev => !prev)}
   cerrarSesion={cerrarSesion}
+    cambiarVista={cambiarVista}
+
 />
           <div className="p-6 flex-1 overflow-y-auto">
             {renderContenido()}

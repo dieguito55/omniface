@@ -1,19 +1,19 @@
-// omniface-frontend/src/api/api.js
+// src/api/api.js
 import axios from "axios";
 
-const API_URL = "http://192.168.1.103:8000";
+const API_URL = "http://192.168.31.146:8000";
 
 const api = axios.create({
   baseURL: API_URL,
-  headers: {
-    "Content-Type": "application/json",
-  },
 });
 
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem("access_token");
   if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
+    config.headers = {
+      ...config.headers,
+      Authorization: `Bearer ${token}`,
+    };
   }
   return config;
 });
@@ -36,15 +36,12 @@ api.interceptors.response.use(
         if (!refresh_token) throw new Error("Refresh token no encontrado");
 
         console.log("🟡 Token expirado, intentando refrescar...");
-
-       const res = await api.post("/auth/refrescar-token", {
-  refresh_token,
-});
-        console.log("✅ Nuevo access_token generado:", res.data.access_token);
+        const res = await api.post("/auth/refrescar-token", { refresh_token });
 
         const nuevo_token = res.data.access_token;
         localStorage.setItem("access_token", nuevo_token);
         originalRequest.headers.Authorization = `Bearer ${nuevo_token}`;
+
         return api(originalRequest);
       } catch (err) {
         console.error("🔴 Error al refrescar el token:", err);

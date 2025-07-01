@@ -15,13 +15,34 @@ const opciones = [
   { label: "RECONOCIMIENTO FACIAL", icon: <FaCamera />, key: "ReconocimientoFacial" },
   { label: "HISTORIAL DE ASISTENCIA", icon: <FaHistory />, key: "HistorialAsistencia" },
   { label: "CONFIGURACIÓN", icon: <FaCog />, key: "Configuracion" },
-  { label: "NOTIFICACIÓN", icon: <FaBell />, key: "Notificacion" },
+  { label: `NOTIFICACIÓN`, icon: <FaBell />, key: "Notificacion", notifica: true },
+
 ];
 
 export default function Sidebar({ vistaActual, cambiarVista, colapsado }) {
   const [usuario, setUsuario] = useState({ nombre: "...", imagen: "default.png" });
   const [estadoServidor, setEstadoServidor] = useState("online");
   const [textoAnimado, setTextoAnimado] = useState("");
+const [notificaciones, setNotificaciones] = useState(0);
+useEffect(() => {
+  const obtenerNotificaciones = async () => {
+    try {
+      const res = await api.get("/personas/notificaciones");
+      setNotificaciones(res.data.pendientes || 0);
+    } catch (err) {
+      console.warn("⚠️ Error al obtener notificaciones:", err);
+    }
+  };
+
+  // Llamado inicial
+  obtenerNotificaciones();
+
+  // Actualizar cada 15 segundos automáticamente
+  const intervalo = setInterval(obtenerNotificaciones, 3000);
+
+  // Limpiar intervalo si el componente se desmonta
+  return () => clearInterval(intervalo);
+}, []);
 
   useEffect(() => {
     const obtenerPerfil = async () => {
@@ -103,25 +124,31 @@ export default function Sidebar({ vistaActual, cambiarVista, colapsado }) {
 
         {/* NAV */}
         <nav className="space-y-3 mt-4 px-2">
-          {opciones.map(({ label, icon, key }) => (
-            <div
-              key={key}
-              className={`relative group flex items-center ${colapsado ? "justify-center" : "justify-start"} gap-4 
-                px-6 py-4 text-[16px] font-Poppins cursor-pointer transition-all duration-300 ease-in-out
-                ${vistaActual === key
-                  ? "bg-blue-400 text-black rounded-l-none rounded-r-full shadow-xl scale-105"
-                  : "hover:bg-blue-200 hover:text-black hover:scale-[1.02] rounded-full text-white"
-                }`}
-              onClick={() => cambiarVista(key)}
-              data-tooltip-id="sidebar-tooltip"
-              data-tooltip-content={label}
-            >
-              <span className="text-[30px] p-2 rounded-full bg-white/20 group-hover:bg-white/30">
-                {icon}
-              </span>
-              {!colapsado && <span>{label}</span>}
-            </div>
-          ))}
+          {opciones.map(({ label, icon, key, notifica }) => (
+  <div
+    key={key}
+    className={`relative group flex items-center ${colapsado ? "justify-center" : "justify-start"} gap-4 
+      px-6 py-3 text-[16px] font-Poppins cursor-pointer transition-all duration-300 ease-in-out
+      ${vistaActual === key
+        ? "bg-blue-400 text-black rounded-l-none rounded-r-full shadow-xl scale-105"
+        : "hover:bg-blue-200 hover:text-black hover:scale-[1.02] rounded-full text-white"
+      }`}
+    onClick={() => cambiarVista(key)}
+    data-tooltip-id="sidebar-tooltip"
+    data-tooltip-content={label}
+  >
+    <span className="text-[20px] p-2 rounded-full bg-white/20 group-hover:bg-white/30 relative">
+      {icon}
+      {notifica && notificaciones > 0 && (
+        <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full text-xs flex items-center justify-center text-white font-bold">
+          {notificaciones}
+        </span>
+      )}
+    </span>
+    {!colapsado && <span>{label}</span>}
+  </div>
+))}
+
         </nav>
 
         {/* TOOLTIP GENERAL */}
