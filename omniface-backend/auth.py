@@ -16,7 +16,7 @@ def registrar(usuario: UsuarioRegistro):
     cursor = conn.cursor()
     cursor.execute("SELECT id FROM usuarios WHERE correo = %s", (usuario.correo,))
     if cursor.fetchone():
-        raise HTTPException(status_code=400, detail="Correo ya registrado")
+        raise HTTPException(status_code=409, detail="Correo ya registrado")
 
     hash_clave = hash_password(usuario.contraseña)
     cursor.execute("""

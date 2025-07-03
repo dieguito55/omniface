@@ -1,0 +1,11 @@
+
+{
+   "carpeta_imagenes": "imagenes_optimizadas",
+    "carpeta_salida": "modelo_final",
+    "n_hilos": 8,
+    "use_gpu": true,
+    "umbral_enfoque": 40.0,
+    "resolucion_minima": [100, 100],
+    "guardar_rechazadas": true,
+    "debug_visual": true
+}

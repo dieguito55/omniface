@@ -35,8 +35,9 @@ procesadas = []
 for nombre in imagenes:
     ruta = os.path.join(CARPETA_ENTRADA, nombre)
     salida = os.path.join(CARPETA_SALIDA, nombre)
-    img = cv2.imread(ruta)
+    os.makedirs(os.path.dirname(salida), exist_ok=True)  # ✅ CREAR SUBCARPETA
 
+    img = cv2.imread(ruta)
     if img is None:
         print(f"[ERROR] No se pudo leer: {nombre}", file=sys.stderr)
         continue

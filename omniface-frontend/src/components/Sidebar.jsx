@@ -1,48 +1,158 @@
 // omniface-frontend/src/components/Sidebar.jsx
 import {
   FaHome, FaUserFriends, FaClock, FaCamera,
-  FaHistory, FaCog, FaBell
+  FaHistory, FaCog, FaBell, FaServer, FaChevronRight
 } from "react-icons/fa";
+import { FiLogOut } from "react-icons/fi";
+import { HiOutlineChip } from "react-icons/hi";
 import { useEffect, useState } from "react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import api from "../api/api";
 import { Tooltip } from "react-tooltip";
 
 const opciones = [
-  { label: "INICIO", icon: <FaHome />, key: "Inicio" },
-  { label: "GESTIÓN DE PERSONAS", icon: <FaUserFriends />, key: "GestionPersonas" },
-  { label: "GENERAR MODELO", icon: <FaClock />, key: "GenerarModelo" },
-  { label: "RECONOCIMIENTO FACIAL", icon: <FaCamera />, key: "ReconocimientoFacial" },
-  { label: "HISTORIAL DE ASISTENCIA", icon: <FaHistory />, key: "HistorialAsistencia" },
-  { label: "CONFIGURACIÓN", icon: <FaCog />, key: "Configuracion" },
-  { label: `NOTIFICACIÓN`, icon: <FaBell />, key: "Notificacion", notifica: true },
-
+  { label: "Inicio", icon: <FaHome />, key: "Inicio" },
+  { label: "Gestión de Personas", icon: <FaUserFriends />, key: "GestionPersonas" },
+  { label: "Generar Modelo", icon: <FaClock />, key: "GenerarModelo" },
+  { label: "Reconocimiento Facial", icon: <FaCamera />, key: "ReconocimientoFacial" },
+  { label: "Historial", icon: <FaHistory />, key: "HistorialAsistencia" },
+  { label: "Configuración", icon: <FaCog />, key: "Configuracion" },
+  { label: "Notificaciones", icon: <FaBell />, key: "Notificacion", notifica: true },
 ];
+
+const ServerStatusIndicator = ({ status, colapsado }) => (
+  <motion.div 
+    whileHover={{ scale: 1.05 }}
+    className={`flex items-center ${colapsado ? "justify-center" : "justify-between"} p-2 rounded-lg bg-gradient-to-r ${status === "online" ? "from-green-900/30 to-green-800/20" : "from-red-900/30 to-red-800/20"} backdrop-blur-sm`}
+  >
+    <div className="flex items-center">
+      <div className={`p-1 rounded-full ${status === "online" ? "bg-green-400/90" : "bg-red-400/90"} shadow-lg`}>
+        <HiOutlineChip className={`${status === "online" ? "text-green-100" : "text-red-100"} text-sm`} />
+      </div>
+      {!colapsado && (
+        <div className="ml-3">
+          <p className="text-xs font-medium text-white/80">Servidor</p>
+          <p className={`text-xs font-bold ${status === "online" ? "text-green-400" : "text-red-400"}`}>
+            {status === "online" ? "OPERATIVO" : "INACTIVO"}
+          </p>
+        </div>
+      )}
+    </div>
+    {!colapsado && (
+      <div className={`text-xs px-2 py-1 rounded-full ${status === "online" ? "bg-green-400/20 text-green-400" : "bg-red-400/20 text-red-400"}`}>
+        {status === "online" ? "LIVE" : "OFF"}
+      </div>
+    )}
+  </motion.div>
+);
+
+const NavItem = ({ item, isActive, colapsado, notificaciones, onClick, hoveredItem, setHoveredItem }) => (
+  <motion.div
+    whileHover={{ scale: 1.03 }}
+    whileTap={{ scale: 0.97 }}
+    onHoverStart={() => setHoveredItem(item.key)}
+    onHoverEnd={() => setHoveredItem(null)}
+    className={`relative flex items-center ${colapsado ? "justify-center" : "justify-start"} 
+      ${isActive ? "bg-white/10" : "hover:bg-white/5"} 
+      rounded-xl mx-1 p-3 cursor-pointer transition-all duration-200
+      ${isActive ? "border-l-4 border-[#7fb3ff]" : ""}`}
+    onClick={onClick}
+    data-tooltip-id="sidebar-tooltip"
+    data-tooltip-content={item.label}
+  >
+    <div className="relative">
+      <motion.span
+        animate={{
+          color: isActive ? "#7fb3ff" : "#a0c4ff",
+          scale: isActive ? 1.1 : 1
+        }}
+        className="text-lg"
+      >
+        {item.icon}
+      </motion.span>
+      {item.notifica && notificaciones > 0 && (
+        <motion.span 
+          initial={{ scale: 0 }}
+          animate={{ scale: 1 }}
+          className="absolute -top-2 -right-2 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center text-xs text-white font-bold shadow-lg"
+        >
+          {notificaciones}
+        </motion.span>
+      )}
+    </div>
+    
+    {!colapsado && (
+      <motion.div
+        initial={{ opacity: 0, x: -10 }}
+        animate={{ opacity: 1, x: 0 }}
+        className="ml-3 overflow-hidden"
+      >
+        <p className="text-sm font-medium text-white/90">{item.label}</p>
+        {isActive && (
+          <motion.p 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 0.7 }}
+            className="text-xs text-[#7fb3ff]"
+          >
+            Activo
+          </motion.p>
+        )}
+      </motion.div>
+    )}
+
+    {!colapsado && isActive && (
+      <motion.div
+        initial={{ opacity: 0, x: 10 }}
+        animate={{ opacity: 1, x: 0 }}
+        className="ml-auto"
+      >
+        <FaChevronRight className="text-[#7fb3ff] text-xs" />
+      </motion.div>
+    )}
+
+    <AnimatePresence>
+      {hoveredItem === item.key && colapsado && (
+        <motion.div
+          initial={{ opacity: 0, x: 20 }}
+          animate={{ opacity: 1, x: 0 }}
+          exit={{ opacity: 0, x: 20 }}
+          className="absolute left-full ml-3 px-3 py-2 bg-[#1e2c4a] text-white text-sm rounded-lg shadow-xl whitespace-nowrap z-50 border border-white/10"
+        >
+          {item.label}
+          {item.notifica && notificaciones > 0 && (
+            <span className="ml-2 px-1.5 py-0.5 bg-red-500 rounded-full text-xs">
+              {notificaciones}
+            </span>
+          )}
+          <div className="absolute top-1/2 -left-1.5 w-3 h-3 bg-[#1e2c4a] transform -translate-y-1/2 rotate-45 border-l border-t border-white/10" />
+        </motion.div>
+      )}
+    </AnimatePresence>
+  </motion.div>
+);
 
 export default function Sidebar({ vistaActual, cambiarVista, colapsado }) {
   const [usuario, setUsuario] = useState({ nombre: "...", imagen: "default.png" });
   const [estadoServidor, setEstadoServidor] = useState("online");
   const [textoAnimado, setTextoAnimado] = useState("");
-const [notificaciones, setNotificaciones] = useState(0);
-useEffect(() => {
-  const obtenerNotificaciones = async () => {
-    try {
-      const res = await api.get("/personas/notificaciones");
-      setNotificaciones(res.data.pendientes || 0);
-    } catch (err) {
-      console.warn("⚠️ Error al obtener notificaciones:", err);
-    }
-  };
+  const [notificaciones, setNotificaciones] = useState(0);
+  const [hoveredItem, setHoveredItem] = useState(null);
+  const [isHovered, setIsHovered] = useState(false);
 
-  // Llamado inicial
-  obtenerNotificaciones();
+  useEffect(() => {
+    const obtenerNotificaciones = async () => {
+      try {
+        const res = await api.get("/personas/notificaciones");
+        setNotificaciones(res.data.pendientes || 0);
+      } catch (err) {
+        console.warn("⚠️ Error al obtener notificaciones:", err);
+      }
+    };
 
-  // Actualizar cada 15 segundos automáticamente
-  const intervalo = setInterval(obtenerNotificaciones, 3000);
-
-  // Limpiar intervalo si el componente se desmonta
-  return () => clearInterval(intervalo);
-}, []);
+    obtenerNotificaciones();
+    const intervalo = setInterval(obtenerNotificaciones, 3000);
+    return () => clearInterval(intervalo);
+  }, []);
 
   useEffect(() => {
     const obtenerPerfil = async () => {
@@ -59,101 +169,164 @@ useEffect(() => {
     obtenerPerfil();
   }, []);
 
-  useEffect(() => {
-    let i = 0;
-    const texto = `Mr. ${usuario.nombre}`;
-    const intervalo = setInterval(() => {
-      setTextoAnimado(prev => {
+ useEffect(() => {
+  let i = 0;
+  let mostrando = true;
+  const texto = usuario.nombre;
+  
+  const intervalo = setInterval(() => {
+    setTextoAnimado(prev => {
+      if (mostrando) {
         const siguiente = texto.slice(0, i + 1);
         i++;
-        if (i === texto.length) clearInterval(intervalo);
+        if (i > texto.length) {
+          mostrando = false;
+          i = texto.length - 1;
+        }
         return siguiente;
-      });
-    }, 60);
-    return () => clearInterval(intervalo);
-  }, [usuario.nombre]);
+      } else {
+        const siguiente = texto.slice(0, i);
+        i--;
+        if (i < 0) {
+          mostrando = true;
+          i = 0;
+        }
+        return siguiente;
+      }
+    });
+  }, 340);
+
+  return () => clearInterval(intervalo);
+}, [usuario.nombre]);
 
   return (
     <motion.aside
-  initial={{ x: -300, opacity: 0 }}
-  animate={{ x: 0, opacity: 1 }}
-  transition={{ duration: 0.7 }}
-  className={`transition-all duration-300 ease-in-out
-    ${
-      colapsado
-        ? "w-[80px] md:relative" // 🔒 Modo colapsado (en PC se queda fijo a la izquierda)
-        : "w-72 md:relative absolute top-0 left-0 z-50" // 🟢 Modo expandido
-    }
-    h-full bg-gradient-to-b from-[#402D53] via-[#2D3C74] to-[#1C2540] text-white
-    backdrop-blur-lg border-r-4 border-[#2C2F4A] flex flex-col justify-between py-4 shadow-2xl`}
->
-      <div>
+      initial={{ x: -300, opacity: 0 }}
+      animate={{ x: 0, opacity: 1 }}
+      transition={{ duration: 0.5, ease: "easeOut" }}
+      onHoverStart={() => setIsHovered(true)}
+      onHoverEnd={() => setIsHovered(false)}
+      className={`h-full bg-gradient-to-b from-[#0f172a] to-[#0a1120] text-white
+        border-r border-white/10 flex flex-col justify-between
+        ${colapsado ? "w-20" : "w-64"} transition-all duration-300 ease-in-out shadow-2xl relative z-50`}
+    >
+      {/* Efecto de borde luminoso */}
+      <div className="absolute inset-y-0 left-0 w-0.5 bg-gradient-to-b from-[#7fb3ff] to-[#a0c4ff] rounded-r-full" />
+
+      <div className="p-2">
         {/* LOGO */}
-        <div className={`flex items-center ${colapsado ? "justify-center" : "justify-center"} py-2 border-b border-[#2C2F4A] px-4`}>
-          <img src="/logo.png" alt="Logo" className={`${colapsado ? "h-10" : "h-14"} transition-all`} />
+        <motion.div 
+          whileHover={{ scale: 1.02 }}
+          className={`flex items-center ${colapsado ? "justify-center py-4" : "justify-start px-3 py-4"} mb-2`}
+        >
+          <motion.div
+            animate={{
+              rotate: isHovered ? 360 : 0,
+              scale: isHovered ? 1.1 : 1
+            }}
+            transition={{ duration: 0.5 }}
+          >
+            <img 
+              src="/logo.png" 
+              alt="Logo" 
+              className={`${colapsado ? "h-8" : "h-9 mr-2"} transition-all drop-shadow-lg`} 
+            />
+          </motion.div>
           {!colapsado && (
-            <h1 className="ml-2 text-3xl font-extrabold font-irish text-white">
-              Omni<span className="text-blue-400">face</span>
-            </h1>
+            <motion.h1 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="text-2xl font-bold bg-gradient-to-r from-[#7fb3ff] to-[#a0c4ff] bg-clip-text text-transparent"
+            >
+              Omniface
+            </motion.h1>
           )}
-        </div>
+        </motion.div>
 
         {/* PERFIL */}
-        <div className={`flex items-center gap-3 mt-6 mb-4 px-4 relative ${colapsado ? "flex-col" : ""}`}>
-          <img
-            src={`/avatars/${usuario.imagen}`}
-            alt="Usuario"
-            className="w-14 h-14 rounded-full border-[2.5px] border-blue-300 shadow-md object-cover"
-          />
+        <motion.div 
+          whileHover={{ scale: 1.02 }}
+          className={`flex items-center ${colapsado ? "justify-center py-3" : "justify-start px-3 py-3"} mb-4 rounded-xl bg-white/5 backdrop-blur-sm`}
+        >
+          <motion.div
+            whileHover={{ scale: 1.1 }}
+            className="relative"
+          >
+            <img
+              src={`/avatars/${usuario.imagen}`}
+              alt="Usuario"
+              className={`${colapsado ? "w-10 h-10" : "w-12 h-12"} rounded-full border-2 border-[#7fb3ff]/50 shadow-lg object-cover`}
+            />
+            <motion.div 
+              animate={{ 
+                scale: [1, 1.2, 1],
+                boxShadow: estadoServidor === "online" 
+                  ? "0 0 0 2px rgba(74, 222, 128, 0.8)" 
+                  : "0 0 0 2px rgba(248, 113, 113, 0.8)"
+              }}
+              transition={{ repeat: Infinity, duration: 2 }}
+              className={`absolute ${colapsado ? "-bottom-1 -right-1" : "bottom-0 right-0"} w-3 h-3 rounded-full ${estadoServidor === "online" ? "bg-green-400" : "bg-red-500"} border border-white`}
+            />
+          </motion.div>
+          
           {!colapsado && (
-            <div>
-              <p className="font-bold text-[16px] font-Poppins">Hola 👋</p>
-              <p className="text-[14px] text-blue-200 font-Poppins">{textoAnimado}</p>
-            </div>
+            <motion.div 
+              initial={{ opacity: 0, x: -10 }}
+              animate={{ opacity: 1, x: 0 }}
+              className="ml-3 overflow-hidden"
+            >
+              <p className="text-xs font-medium text-white/60">Bienvenido</p>
+              <p className="text-[#a0c4ff] font-semibold text-sm truncate max-w-[160px]">
+                {textoAnimado || ""}
+              <span className="animate-pulse">|</span>
+
+              </p>
+            </motion.div>
           )}
-          {/* Estado servidor */}
-          <div className={`absolute ${colapsado ? "bottom-[-6px] left-[50%] -translate-x-1/2" : "bottom-[-6px] left-[6rem]"} flex items-center gap-1`}>
-            <div className={`w-3 h-3 rounded-full ${estadoServidor === "online" ? "bg-green-400" : "bg-red-500"} animate-pulse`} />
-            {!colapsado && (
-              <span className="text-[10px] text-gray-200 font-light">
-                {estadoServidor === "online" ? "Servidor en línea" : "Sin conexión"}
-              </span>
-            )}
-          </div>
-        </div>
+        </motion.div>
 
         {/* NAV */}
-        <nav className="space-y-3 mt-4 px-2">
-          {opciones.map(({ label, icon, key, notifica }) => (
-  <div
-    key={key}
-    className={`relative group flex items-center ${colapsado ? "justify-center" : "justify-start"} gap-4 
-      px-6 py-3 text-[16px] font-Poppins cursor-pointer transition-all duration-300 ease-in-out
-      ${vistaActual === key
-        ? "bg-blue-400 text-black rounded-l-none rounded-r-full shadow-xl scale-105"
-        : "hover:bg-blue-200 hover:text-black hover:scale-[1.02] rounded-full text-white"
-      }`}
-    onClick={() => cambiarVista(key)}
-    data-tooltip-id="sidebar-tooltip"
-    data-tooltip-content={label}
-  >
-    <span className="text-[20px] p-2 rounded-full bg-white/20 group-hover:bg-white/30 relative">
-      {icon}
-      {notifica && notificaciones > 0 && (
-        <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full text-xs flex items-center justify-center text-white font-bold">
-          {notificaciones}
-        </span>
-      )}
-    </span>
-    {!colapsado && <span>{label}</span>}
-  </div>
-))}
-
+        <nav className="space-y-1 mt-2">
+          {opciones.map((item) => (
+            <NavItem
+              key={item.key}
+              item={item}
+              isActive={vistaActual === item.key}
+              colapsado={colapsado}
+              notificaciones={notificaciones}
+              onClick={() => cambiarVista(item.key)}
+              hoveredItem={hoveredItem}
+              setHoveredItem={setHoveredItem}
+            />
+          ))}
         </nav>
-
-        {/* TOOLTIP GENERAL */}
-        <Tooltip id="sidebar-tooltip" place="right" />
       </div>
+
+      {/* FOOTER */}
+      <div className="p-2 space-y-2">
+        <ServerStatusIndicator status={estadoServidor} colapsado={colapsado} />
+        
+        <motion.div
+          whileHover={{ scale: 1.02 }}
+          whileTap={{ scale: 0.98 }}
+          className={`flex items-center ${colapsado ? "justify-center" : "justify-start px-3"} py-3 rounded-xl hover:bg-white/5 cursor-pointer`}
+          onClick={() => console.log("Cerrar sesión")}
+        >
+          <FiLogOut className="text-lg text-red-300/80" />
+          {!colapsado && (
+            <span className="ml-3 text-sm font-medium text-white/80">Cerrar sesión</span>
+          )}
+        </motion.div>
+      </div>
+
+      {/* TOOLTIP PARA MODO COLAPSADO */}
+      <Tooltip 
+        id="sidebar-tooltip" 
+        place="right" 
+        effect="solid"
+        className="z-50 !bg-[#1e2c4a] !text-white !opacity-100 !rounded-lg !px-3 !py-2 !border !border-white/10"
+        offset={{ right: 15 }}
+      />
     </motion.aside>
   );
 }
