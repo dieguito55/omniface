@@ -11,7 +11,14 @@ import json
 from fastapi import Path
 import sys
 from typing import Optional
-
+from typing import Optional, List
+import numpy as np
+import pickle, json, faiss, os
+from pathlib import Path as FilePath
+from sklearn.manifold import TSNE
+from sklearn.cluster import KMeans
+from fastapi import Query
+# --------------------------
 personas_router = APIRouter(prefix="/personas", tags=["Personas"])
 
 CARPETA_IMAGENES = "imagenes_originales"
@@ -398,7 +405,7 @@ def errores_modelo(
     if not fila or not fila["ruta_errores"]:
         raise HTTPException(status_code=404, detail="No se encontró el modelo o no hay errores")
 
-    ruta_errores = Path(fila["ruta_errores"])
+    ruta_errores = FilePath(fila["ruta_errores"])
     if not ruta_errores.exists():
         raise HTTPException(status_code=404, detail="Archivo de errores no encontrado")
 
@@ -407,3 +414,136 @@ def errores_modelo(
 
     return {"errores": errores}
 
+# ────────────────────────────────────────────────────────────────
+# 3️⃣  POST /personas/generar_modelo_async
+#     • Devuelve lista de personas + tiempo estimado
+#     • Lanza generar_embeddings.py en segundo plano (Popen)
+# ────────────────────────────────────────────────────────────────
+@personas_router.post("/generar_modelo_async")
+def generar_modelo_async(usuario: DatosToken = Depends(verificar_token)):
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+
+    # Comprobar que todas las imágenes están optimizadas
+    cursor.execute("""
+        SELECT id, nombre_completo,departamento, imagen_mejorada
+        FROM personas
+        WHERE usuario_id = %s AND imagen_mejorada_listo = TRUE
+    """, (usuario.id,))
+    lista = cursor.fetchall()
+    if not lista:
+        raise HTTPException(status_code=400, detail="No hay imágenes optimizadas")
+
+    # ➜ TIEMPO ESTIMADO - simple heurística (2 s/img + 5 s sobre-head)
+    estimado = len(lista) * 10 + 10
+
+    # Lanza el script sin bloquear
+    subprocess.Popen(
+        ["python", "generar_embeddings.py", str(usuario.id)],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL
+    )
+
+    # Devuelve datos mínimos para la animación
+    personas_anim = [
+        {
+            "nombre": p["nombre_completo"],
+            "departamento": p["departamento"],  # Añade este campo
+            "imagen_url": f"/imagenes_optimizadas/{p['imagen_mejorada']}"
+        } for p in lista
+    ]
+
+    return {
+        "mensaje": "Generación de modelo iniciada",
+        "estimado_segundos": estimado,
+        "personas": personas_anim
+    }
+
+
+# ───────────────────────────────────────────────────────────────
+@personas_router.get("/analitica_modelo")
+def analitica_modelo(usuario: DatosToken = Depends(verificar_token)):
+    conn   = get_connection()
+    cursor = conn.cursor(dictionary=True)
+
+    # último modelo p/usuario
+    cursor.execute("""
+        SELECT ruta_modelo, ruta_errores
+        FROM modelos_generados
+        WHERE usuario_id = %s
+        ORDER BY fecha DESC LIMIT 1
+    """, (usuario.id,))
+    modelo = cursor.fetchone()
+    if not modelo:
+        raise HTTPException(status_code=404, detail="No existe un modelo todavía")
+
+    # ── cargar embeddings.pkl ───────────────────────────────────
+    carpeta   = FilePath(modelo["ruta_modelo"]).parent
+    pkl_path  = carpeta / "embeddings.pkl"
+    if not pkl_path.exists():
+        raise HTTPException(status_code=404, detail="embeddings.pkl no encontrado")
+
+    with open(pkl_path, "rb") as f:
+        data_pkl = pickle.load(f)
+
+    nombres   = data_pkl.get("nombres", [])
+    embeds    = data_pkl.get("embeddings", [])
+    DIM       = 512
+    if not nombres or not isinstance(embeds, (list, np.ndarray)):
+        raise HTTPException(status_code=500, detail="embeddings.pkl corrupto")
+
+    # filtra vectores correctos
+    vectores, rechazados = [], []
+    for n, v in zip(nombres, embeds):
+        if isinstance(v, np.ndarray) and v.shape == (DIM,):
+            vectores.append(v.astype(np.float32))
+        else:
+            rechazados.append(n)
+    vectores = np.stack(vectores)
+    faiss.normalize_L2(vectores)
+
+    # ── stats ───────────────────────────────────────────────────
+    stats = {
+        "personas"   : len(nombres),
+        "rechazados" : len(rechazados),
+        "dimension"  : DIM,
+        "clusters"   : min(3, len(nombres)) if len(nombres) >= 3 else 1
+    }
+
+    # ── t-SNE + KMeans ──────────────────────────────────────────
+    if len(nombres) > 1:
+        tsne = TSNE(n_components=2, random_state=42,
+                    perplexity=min(30, len(nombres)-1))
+        coords = tsne.fit_transform(vectores)
+        km     = KMeans(n_clusters=stats["clusters"], random_state=42)
+        labels = km.fit_predict(vectores)
+    else:
+        coords = np.zeros((1, 2))
+        labels = np.array([0])
+
+    tsne_list = [
+        {"nombre": n, "x": float(x), "y": float(y), "cluster": int(c)}
+        for n, (x, y), c in zip(nombres, coords, labels)
+    ]
+
+    # ── vecinos más cercanos ───────────────────────────────────
+    index = faiss.IndexFlatIP(DIM)
+    index.add(vectores)
+    K = min(3, len(nombres)-1)
+    D, I = index.search(vectores, K+1)
+    vecinos = []
+    for i, nombre in enumerate(nombres):
+        for k in range(1, K+1):
+            j   = int(I[i][k])
+            sim = float(D[i][k])
+            vecinos.append({
+                "persona"   : nombre,
+                "vecino"    : nombres[j],
+                "similitud" : round(sim, 4)
+            })
+
+    return {
+        "stats"   : stats,
+        "tsne"    : tsne_list,
+        "vecinos" : vecinos
+    }

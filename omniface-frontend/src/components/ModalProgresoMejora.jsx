@@ -127,7 +127,7 @@ export default function ModalProgresoMejora({ lista, onCompletar }) {
                       <td className="px-4 py-3">
                         <div className="flex items-center">
                           <img
-                            src={`http://192.168.1.111:8000/imagenes_originales/${img}`}
+                            src={`http://192.168.0.105:8000/imagenes_originales/${img}`}
                             alt="preview"
                             className="h-10 w-10 object-cover rounded-lg border border-[#7fb3ff]/20"
                           />

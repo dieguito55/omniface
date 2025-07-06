@@ -1,7 +1,7 @@
 // omniface-frontend/src/api/api.js
 import axios from "axios";
 
-const API_URL = "http://192.168.1.111:8000";
+const API_URL = "http://192.168.0.105:8000";
 
 const api = axios.create({
   baseURL: API_URL,
