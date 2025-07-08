@@ -11,7 +11,7 @@ from jose.exceptions import JWTError
 auth_router = APIRouter(prefix="/auth", tags=["Autenticación"])
 
 @auth_router.post("/registrar")
-def registrar(usuario: UsuarioRegistro):
+def registrar(usuario: UsuarioRegistro):  
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute("SELECT id FROM usuarios WHERE correo = %s", (usuario.correo,))

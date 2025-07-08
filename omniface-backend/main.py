@@ -6,6 +6,8 @@ from auth import auth_router
 from protected import usuarios_router
 from personas import personas_router
 from fastapi.staticfiles import StaticFiles
+from departamentos import departamentos_router
+from recon_live import router as recon_router
 
 app = FastAPI(title="OMNIFACE Backend")
 
@@ -15,7 +17,7 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:5173",
         "http://127.0.0.1:5173",
-        "http://192.168.0.105:5173",  # tu frontend en red local
+        "http://192.168.108.121:5173",  # tu frontend en red local
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -25,7 +27,9 @@ app.add_middleware(
 # 🔀 Routers
 app.include_router(auth_router)
 app.include_router(usuarios_router)
+app.include_router(departamentos_router)
 app.include_router(personas_router)
+app.include_router(recon_router)
 
 # 📂 Rutas estáticas para imágenes
 app.mount("/imagenes_originales", StaticFiles(directory="imagenes_originales"), name="imagenes_originales")

@@ -13,6 +13,7 @@ import ReconocimientoFacial from "../pages/ReconocimientoFacial";
 import HistorialAsistencia from "../pages/HistorialAsistencia";
 import Configuracion from "../pages/Configuracion";
 import Notificacion from "../pages/Notificacion";
+import MiniReconPreview from "../components/MiniReconPreview";
 
 export default function PanelAdministrador() {
   const navigate = useNavigate();
@@ -90,15 +91,17 @@ export default function PanelAdministrador() {
         <div className={`flex-1 flex flex-col transition-all duration-300
           ${!sidebarColapsado && esMovil ? "opacity-30 pointer-events-none" : "opacity-100"}`}>
           <Topbar
-  titulo={vistaActual}
-  toggleSidebar={() => setSidebarColapsado(prev => !prev)}
-  cerrarSesion={cerrarSesion}
-    cambiarVista={cambiarVista}
+            titulo={vistaActual}
+            toggleSidebar={() => setSidebarColapsado(prev => !prev)}
+            cerrarSesion={cerrarSesion}
+              cambiarVista={cambiarVista}
 
-/>
+            />
           <div className="p-6 flex-1 overflow-y-auto">
             {renderContenido()}
           </div>
+          <MiniReconPreview visible={vistaActual !== "ReconocimientoFacial"} />
+
         </div>
       </div>
     </div>

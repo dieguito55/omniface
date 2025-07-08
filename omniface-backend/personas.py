@@ -18,6 +18,8 @@ from pathlib import Path as FilePath
 from sklearn.manifold import TSNE
 from sklearn.cluster import KMeans
 from fastapi import Query
+from typing import Optional, List, Union
+
 # --------------------------
 personas_router = APIRouter(prefix="/personas", tags=["Personas"])
 
@@ -28,11 +30,20 @@ os.makedirs(CARPETA_IMAGENES, exist_ok=True)
 @personas_router.post("/registrar")
 async def registrar_persona(
     nombre_completo: str = Form(...),
-    departamento: str = Form(...),
+    departamentos_id: int = Form(...),          #  ←  INT, no string
     codigo_app: str = Form(...),
     imagen: UploadFile = Form(...),
     usuario: DatosToken = Depends(verificar_token)
 ):
+     # 1.  Validar que el departamento exista y sea del usuario
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT id FROM departamentos WHERE id = %s AND usuario_id = %s",
+        (departamentos_id, usuario.id)
+    )
+    if cursor.fetchone() is None:
+        raise HTTPException(status_code=400, detail="Departamento inválido")
     extension = os.path.splitext(imagen.filename)[1].lower()
     if extension not in [".jpg", ".jpeg", ".png"]:
         raise HTTPException(status_code=400, detail="Formato de imagen inválido")
@@ -65,9 +76,9 @@ async def registrar_persona(
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute("""
-        INSERT INTO personas (usuario_id, nombre_completo, departamento, codigo_app, imagen_original)
+        INSERT INTO personas (usuario_id, nombre_completo, departamentos_id, codigo_app, imagen_original)
         VALUES (%s, %s, %s, %s, %s)
-    """, (usuario.id, nombre_completo, departamento, codigo_app, ruta_relativa))
+    """, (usuario.id, nombre_completo, departamentos_id, codigo_app, ruta_relativa))
     conn.commit()
 
     return JSONResponse(status_code=200, content={"mensaje": "Persona registrada correctamente"})
@@ -78,11 +89,19 @@ def listar_personas(usuario: DatosToken = Depends(verificar_token)):
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
     cursor.execute("""
-        SELECT id, nombre_completo, departamento, codigo_app,
-               imagen_original, imagen_mejorada, imagen_mejorada_listo, creado_en
-        FROM personas
-        WHERE usuario_id = %s
-        ORDER BY creado_en DESC
+        SELECT p.id,
+               p.nombre_completo,
+               d.nombre          AS departamento,
+               p.departamentos_id,  
+               p.codigo_app,
+               p.imagen_original,
+               p.imagen_mejorada,
+               p.imagen_mejorada_listo,
+               p.creado_en
+        FROM personas  AS p
+        JOIN departamentos AS d ON p.departamentos_id = d.id
+        WHERE p.usuario_id = %s
+        ORDER BY p.creado_en DESC
     """, (usuario.id,))
     personas = cursor.fetchall()
 
@@ -207,7 +226,7 @@ def guardar_imagen(imagen: UploadFile, nombre_completo: str, usuario_id: int) ->
 async def modificar_persona(
     persona_id: int,
     nombre_completo: str = Form(...),
-    departamento: str = Form(...),
+    departamentos_id: int = Form(...),   # ←  INT
     codigo_app: str = Form(...),
     imagen: UploadFile = Form(None),
     imagen_cambiada: str = Form("false"),
@@ -215,6 +234,12 @@ async def modificar_persona(
 ):
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
+    cursor.execute(
+        "SELECT id FROM departamentos WHERE id=%s AND usuario_id=%s",
+        (departamentos_id, usuario.id)
+    )
+    if cursor.fetchone() is None:
+        raise HTTPException(status_code=400, detail="Departamento inválido")
 
     # 🧠 Verificar existencia y propiedad
     cursor.execute("SELECT * FROM personas WHERE id = %s AND usuario_id = %s", (persona_id, usuario.id))
@@ -270,17 +295,17 @@ async def modificar_persona(
         # 🧠 Actualizar datos e invalidar mejora
         cursor.execute("""
             UPDATE personas
-            SET nombre_completo = %s, departamento = %s, codigo_app = %s,
+            SET nombre_completo = %s, departamentos_id = %s, codigo_app = %s,
                 imagen_original = %s, imagen_mejorada = NULL, imagen_mejorada_listo = FALSE
             WHERE id = %s AND usuario_id = %s
-        """, (nombre_completo, departamento, codigo_app, nueva_ruta_relativa, persona_id, usuario.id))
+        """, (nombre_completo, departamentos_id, codigo_app, nueva_ruta_relativa, persona_id, usuario.id))
     else:
         # 🔁 Solo datos de texto
         cursor.execute("""
             UPDATE personas
-            SET nombre_completo = %s, departamento = %s, codigo_app = %s
+            SET nombre_completo = %s, departamentos_id = %s, codigo_app = %s
             WHERE id = %s AND usuario_id = %s
-        """, (nombre_completo, departamento, codigo_app, persona_id, usuario.id))
+        """, (nombre_completo, departamentos_id, codigo_app, persona_id, usuario.id))
 
     conn.commit()
     return {"mensaje": "Persona modificada correctamente"}
@@ -426,9 +451,11 @@ def generar_modelo_async(usuario: DatosToken = Depends(verificar_token)):
 
     # Comprobar que todas las imágenes están optimizadas
     cursor.execute("""
-        SELECT id, nombre_completo,departamento, imagen_mejorada
-        FROM personas
-        WHERE usuario_id = %s AND imagen_mejorada_listo = TRUE
+        SELECT p.id, p.nombre_completo, d.nombre AS departamento,
+        p.imagen_mejorada
+        FROM personas p
+        JOIN departamentos d ON p.departamentos_id = d.id
+        WHERE p.usuario_id = %s AND p.imagen_mejorada_listo = TRUE
     """, (usuario.id,))
     lista = cursor.fetchall()
     if not lista:

@@ -1,21 +1,30 @@
 // omniface-frontend/src/App.jsx
 import { BrowserRouter, Routes, Route } from "react-router-dom";
-import Login from "./components/Login";
-import PanelAdministrador from "./components/PanelAdministrador";
-import PrivateRoute from "./components/PrivateRoute";
-import '@fontsource/poppins'; // Fuente para todo el proyecto
+import Login               from "./components/Login";
+import PanelAdministrador  from "./components/PanelAdministrador";
+import PrivateRoute        from "./components/PrivateRoute";
+import { ReconProvider }   from "./context/ReconContext";
+
+import "@fontsource/poppins";   // fuente global
 
 function App() {
   return (
     <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<Login />} />
+      {/* El contexto de reconocimiento envuelve TODO el árbol de rutas */}
+      <ReconProvider>
+        <Routes>
+          {/* pública */}
+          <Route path="/" element={<Login />} />
 
-        {/* Rutas protegidas */}
-        <Route element={<PrivateRoute />}>
-          <Route path="/paneladministrador" element={<PanelAdministrador />} />
-        </Route>
-      </Routes>
+          {/* protegidas */}
+          <Route element={<PrivateRoute />}>
+            <Route
+              path="/paneladministrador"
+              element={<PanelAdministrador />}
+            />
+          </Route>
+        </Routes>
+      </ReconProvider>
     </BrowserRouter>
   );
 }

@@ -14,7 +14,7 @@ export default function GestionPersonas() {
   const [modalVisible, setModalVisible] = useState(false);
   const [nuevaPersona, setNuevaPersona] = useState({
     nombre_completo: "",
-    departamento: "",
+    departamentos_id: "", 
     codigo_app: "",
     imagen: null,
   });
@@ -32,6 +32,52 @@ export default function GestionPersonas() {
   const [imagenPrevia, setImagenPrevia] = useState(null);
   const [indiceCardActual, setIndiceCardActual] = useState(0);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  const [modalDepartamentosVisible, setModalDepartamentosVisible] = useState(false);
+  const [departamentos, setDepartamentos] = useState([]);
+  const [nuevoDepartamento, setNuevoDepartamento] = useState("");
+  const [departamentoAEliminar, setDepartamentoAEliminar] = useState(null);
+  const [editandoId, setEditandoId] = useState(null);   // null = modo agregar
+  const [errorDep, setErrorDep] = useState("");   // ← para mensajes de error
+
+  const cargarDepartamentos = async () => {
+  try {
+    const res = await api.get("/departamentos/listar");
+    setDepartamentos(res.data.departamentos || []);
+  } catch (err) {
+    console.error("Error al listar departamentos:", err);
+  }
+};
+const guardarDepartamento = async () => {
+  if (!nuevoDepartamento.trim()) return;
+  try {
+    const formData = new FormData();
+    formData.append("nombre", nuevoDepartamento.trim());
+
+    if (editandoId) {
+      await api.put(`/departamentos/modificar/${editandoId}`, formData);
+    } else {
+      await api.post("/departamentos/agregar", formData);
+    }
+
+    setNuevoDepartamento("");
+    setEditandoId(null);
+    cargarDepartamentos();
+  } catch (err) {
+    alert(err.response?.data?.detail || "Error al guardar.");
+  }
+};
+
+const eliminarDepartamento = async (id) => {
+  try {
+    await api.delete(`/departamentos/eliminar/${id}`);
+    setErrorDep("");
+    cargarDepartamentos();
+    setDepartamentoAEliminar(null);
+  } catch (err) {
+    console.error("Error al eliminar departamento:", err);
+    setErrorDep(err.response?.data?.detail || "Error al eliminar.");
+  }
+};
 
   useEffect(() => {
     const handleResize = () => {
@@ -77,25 +123,27 @@ export default function GestionPersonas() {
     }
     setNuevaPersona({...nuevaPersona, codigo_app: result});
   };
-
+ 
   const iniciarEdicion = (persona) => {
     setModoEdicion(true);
     setModalVisible(true);
     setPersonaAEditar(persona.id);
     setNuevaPersona({
       nombre_completo: persona.nombre_completo,
-      departamento: persona.departamento,
+      departamentos_id: persona.departamentos_id,
       codigo_app: persona.codigo_app,
       imagen: null,
     });
-    setImagenPrevia(`http://192.168.0.105:8000${persona.imagen_url}`);
+    setImagenPrevia(`http://192.168.108.121:8000${persona.imagen_url}`);
+    cargarDepartamentos();
+
   };
 
   const guardarPersona = async (e) => {
     e.preventDefault();
     const formData = new FormData();
     formData.append("nombre_completo", nuevaPersona.nombre_completo);
-    formData.append("departamento", nuevaPersona.departamento);
+    formData.append("departamentos_id", nuevaPersona.departamentos_id);
     formData.append("codigo_app", nuevaPersona.codigo_app);
     
     if (nuevaPersona.imagen) {
@@ -112,7 +160,7 @@ export default function GestionPersonas() {
       }
 
       setModalVisible(false);
-      setNuevaPersona({ nombre_completo: "", departamento: "", codigo_app: "", imagen: null });
+      setNuevaPersona({ nombre_completo: "", departamentos_id: "", codigo_app: "", imagen: null });
       setImagenPrevia(null);
       setModoEdicion(false);
       setPersonaAEditar(null);
@@ -221,13 +269,24 @@ export default function GestionPersonas() {
               className="pl-10 w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#7fb3ff] focus:border-[#7fb3ff]"
             />
           </div>
+          <button
+            onClick={() => {
+                  setModalDepartamentosVisible(true);
+                  cargarDepartamentos();
+                }}
+            className="bg-[#0d9488] hover:bg-[#0f766e] text-white px-4 py-2 rounded-lg shadow-md flex items-center justify-center"
+          >
+            <FaPlus className="inline mr-2" />
+            Departamento
+          </button>
           
           <button
             onClick={() => {
               setModalVisible(true);
               setModoEdicion(false);
-              setNuevaPersona({ nombre_completo: "", departamento: "", codigo_app: "", imagen: null });
+              setNuevaPersona({ nombre_completo: "", departamentos_id: "", codigo_app: "", imagen: null });
               setImagenPrevia(null);
+              cargarDepartamentos(); 
             }}
             className="bg-[#3b2f5e] hover:bg-[#4a3a72] text-white px-4 py-2 rounded-lg shadow-md flex items-center justify-center"
           >
@@ -267,7 +326,7 @@ export default function GestionPersonas() {
                   <div className="bg-white rounded-xl shadow-md overflow-hidden border border-gray-200">
                     <div className="flex justify-center p-4">
                       <img
-                        src={`http://192.168.0.105:8000${personasFiltradas[indiceCardActual].imagen_url}`}
+                        src={`http://192.168.108.121:8000${personasFiltradas[indiceCardActual].imagen_url}`}
                         alt="foto"
                         className="h-32 w-32 object-cover rounded-full border-4 border-[#a0c4ff] shadow-sm"
                       />
@@ -353,7 +412,7 @@ export default function GestionPersonas() {
                     <td className="px-4 py-3 whitespace-nowrap">
                       <div className="flex items-center">
                         <img
-                          src={`http://192.168.0.105:8000${p.imagen_url}`}
+                          src={`http://192.168.108.121:8000${p.imagen_url}`}
                           alt="foto"
                           className="h-12 w-12 md:h-16 md:w-16 object-cover rounded-full border-2 border-[#a0c4ff] shadow-sm"
                         />
@@ -412,7 +471,8 @@ export default function GestionPersonas() {
                 {modoEdicion ? "Editar persona" : "Registrar nueva persona"}
               </h3>
               <button 
-                onClick={() => setModalVisible(false)}
+                onClick={() => setModalVisible(false)
+                }
                 className="text-gray-500 hover:text-gray-700"
               >
                 <FaTimes />
@@ -450,16 +510,23 @@ export default function GestionPersonas() {
               </div>
               
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Departamento</label>
-                <input
-                  type="text"
-                  placeholder="Ej: Ventas"
-                  value={nuevaPersona.departamento}
-                  onChange={(e) => setNuevaPersona({ ...nuevaPersona, departamento: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#7fb3ff] focus:border-[#7fb3ff]"
-                  required
-                />
-              </div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Departamento</label>
+            <select
+              value={nuevaPersona.departamentos_id}
+              onChange={(e) =>
+                setNuevaPersona({ ...nuevaPersona, departamentos_id: e.target.value })
+              }
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#7fb3ff] focus:border-[#7fb3ff]"
+              required
+            >
+              <option value="">Selecciona un departamento</option>
+              {departamentos.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.nombre}
+                </option>
+              ))}
+            </select>
+          </div>
               
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Código para App</label>
@@ -620,6 +687,115 @@ export default function GestionPersonas() {
           </div>
         </div>
       )}
+      {modalDepartamentosVisible && (
+  <div className="fixed inset-0 z-50 bg-black bg-opacity-50 flex justify-center items-center p-4">
+    <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
+      <div className="flex justify-between items-center border-b p-4">
+        <h3 className="text-lg font-semibold text-[#1e2c4a]">Gestionar Departamentos</h3>
+        <button
+          onClick={() => {
+  setModalDepartamentosVisible(false);
+  setNuevoDepartamento("");
+  setEditandoId(null);
+}}
+          className="text-gray-500 hover:text-gray-700"
+        >
+          <FaTimes />
+        </button>
+      </div>
+      <div className="p-4 space-y-4">
+        {/* ➕ Campo para agregar nuevo */}
+        <div className="flex gap-2">
+          <input
+            type="text"
+            placeholder="Nuevo departamento"
+            value={nuevoDepartamento}
+            onChange={(e) => setNuevoDepartamento(e.target.value)}
+            className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0d9488]"
+          />
+
+         <button
+    onClick={guardarDepartamento}
+    className="bg-[#0d9488] hover:bg-[#0f766e] text-white px-4 py-2 rounded-lg"
+  >
+    {editandoId ? "Modificar" : "Agregar"}
+  </button>
+        </div>
+
+        {/* 📋 Lista de departamentos */}
+        <ul className="divide-y divide-gray-200">
+           {departamentos.map((d) => (
+    <li key={d.id} className="flex justify-between items-center py-2">
+      <span className="text-gray-800">{d.nombre}</span>
+      <div className="flex gap-3">
+        {/* Editar */}
+        <button
+          onClick={() => {
+            setNuevoDepartamento(d.nombre);
+            setEditandoId(d.id);       // ← activa modo editar
+          }}
+          className="text-blue-500 hover:text-blue-700"
+          title="Editar"
+        >
+          <FaEdit />
+        </button>
+        {/* Eliminar */}
+        <button
+          onClick={() => {
+            setErrorDep("");            // ← limpia mensaje anterior
+            setDepartamentoAEliminar(d); // ← abre el modal
+          }}
+          className="text-red-500 hover:text-red-700"
+          title="Eliminar"
+        >
+          <FaTrash />
+        </button>
+      </div>
+    </li>
+  ))}
+          {departamentos.length === 0 && (
+            <p className="text-gray-500 text-sm">No hay departamentos aún.</p>
+          )}
+        </ul>
+      </div>
     </div>
-  );
+  </div>
+)}
+{departamentoAEliminar && (
+  <div className="fixed inset-0 z-50 bg-black bg-opacity-50 flex items-center justify-center p-4">
+    <div className="bg-white p-6 rounded-xl shadow-xl max-w-sm w-full text-center border border-[#ff6b6b]">
+      <div className="flex justify-center mb-4">
+        <div className="bg-red-100 p-4 rounded-full shadow-inner border-2 border-red-200">
+          <FaTimesCircle className="text-red-500 text-4xl" />
+        </div>
+      </div>
+      <h3 className="text-lg font-bold text-[#1e2c4a] mb-2">¿Eliminar este departamento?</h3>
+      <p className="text-sm text-gray-600 mb-6">
+        "{departamentoAEliminar.nombre}" será eliminado permanentemente.
+      </p>
+      {errorDep && (
+  <div className="mb-4 px-4 py-2 bg-red-100 text-red-700 rounded-lg text-sm">
+    {errorDep}
+  </div>
+)}
+      <div className="flex justify-center gap-4">
+        <button
+          onClick={() => setDepartamentoAEliminar(null)}
+          className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 flex-1"
+        >
+          Cancelar
+        </button>
+        <button
+          onClick={async () => {
+            await eliminarDepartamento(departamentoAEliminar.id); 
+          }}
+          className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 flex-1"
+        >
+          Sí, eliminar
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+    </div>);
 }
