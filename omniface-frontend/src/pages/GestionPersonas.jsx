@@ -134,7 +134,7 @@ const eliminarDepartamento = async (id) => {
       codigo_app: persona.codigo_app,
       imagen: null,
     });
-    setImagenPrevia(`http://192.168.108.121:8000${persona.imagen_url}`);
+    setImagenPrevia(`http://192.168.31.146:8000${persona.imagen_url}`);
     cargarDepartamentos();
 
   };
@@ -326,7 +326,7 @@ const eliminarDepartamento = async (id) => {
                   <div className="bg-white rounded-xl shadow-md overflow-hidden border border-gray-200">
                     <div className="flex justify-center p-4">
                       <img
-                        src={`http://192.168.108.121:8000${personasFiltradas[indiceCardActual].imagen_url}`}
+                        src={`http://192.168.31.146:8000${personasFiltradas[indiceCardActual].imagen_url}`}
                         alt="foto"
                         className="h-32 w-32 object-cover rounded-full border-4 border-[#a0c4ff] shadow-sm"
                       />
@@ -412,7 +412,7 @@ const eliminarDepartamento = async (id) => {
                     <td className="px-4 py-3 whitespace-nowrap">
                       <div className="flex items-center">
                         <img
-                          src={`http://192.168.108.121:8000${p.imagen_url}`}
+                          src={`http://192.168.31.146:8000${p.imagen_url}`}
                           alt="foto"
                           className="h-12 w-12 md:h-16 md:w-16 object-cover rounded-full border-2 border-[#a0c4ff] shadow-sm"
                         />
