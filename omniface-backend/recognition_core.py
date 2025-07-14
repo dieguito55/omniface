@@ -105,7 +105,8 @@ class InferenceWorker(Thread):
                 "bbox": (x1, y1, x2, y2),
                 "nombre": name,
                 "emocion": emocion,
-                "r": r
+                "r": r,
+                "confidence": sim
             })
         return faces
 
@@ -509,13 +510,26 @@ class RecognitionSession:
     # ╰─────────────────────────╯
     @classmethod
     def _load_fotos(cls, user_id: int):
-        conn = mysql.connector.connect(host="localhost", user="root", password="", database="omniface")
-        cursor = conn.cursor(dictionary=True)
-        cursor.execute("SELECT nombre_completo, imagen_original FROM personas WHERE usuario_id = %s", (user_id,))
-        fotos = {row['nombre_completo']: row['imagen_original'] for row in cursor.fetchall()}
-        cursor.close()
-        conn.close()
-        return fotos
+        try:
+            conn = mysql.connector.connect(host="localhost", user="root", password="", database="omniface")
+            cursor = conn.cursor(dictionary=True)
+            cursor.execute("SELECT nombre_completo, imagen_original FROM personas WHERE usuario_id = %s", (user_id,))
+            rows = cursor.fetchall()
+            if not rows:
+                print(f"[WARNING] No personas encontradas en BD para user_id {user_id}")
+            fotos = {}
+            for row in rows:
+                if row['imagen_original']:
+                    key = row['nombre_completo'].strip().lower()
+                    fotos[key] = row['imagen_original']  # Incluye "usuario_X/..."
+            cursor.close()
+            conn.close()
+            print(f"[DEBUG] Fotos cargadas para user {user_id}: {fotos}")
+            print(f"[DEBUG] Número de fotos: {len(fotos)}")
+            return fotos
+        except mysql.connector.Error as e:
+            print(f"[ERROR] Fallo al cargar fotos de BD: {e}")
+            return {}
 
     def __init__(self, user_id: int, cam_id: int, modo: str = "normal"):
         print(f"[DEBUG] Iniciando RecognitionSession para user_id={user_id}, cam_id={cam_id}, modo={modo}")
@@ -532,6 +546,9 @@ class RecognitionSession:
         self.face_mesh = self._get_face_mesh()
         print("[DEBUG] Cargando modelo...")
         self.index, self.nombres = self._load_model(user_id)
+        # Normaliza self.nombres para que coincida con fotos (lower/strip)
+        self.nombres = [n.strip().lower() for n in self.nombres]
+        print(f"[DEBUG] Nombres normalizados del modelo: {self.nombres}")
         print("[DEBUG] Cargando fotos de DB...")
         self.fotos = self._load_fotos(user_id)
         self.emotion_model = self._get_emotion_model()
@@ -652,25 +669,26 @@ class RecognitionSession:
             # ➜ 2) inferencia en thread-pool **sobre proc_frame**
             final_faces = []               # lo que mandaremos al frontend
             for face in faces:
-                r        = face.pop("r")    # objeto InsightFace
-                name     = face["nombre"]
-                emocion  = face["emocion"]
+                r = face.pop("r")  # objeto InsightFace
+                name = face["nombre"].strip().lower()  # Normaliza ANTES de get()
+                emocion = face["emocion"]
                 x1, y1, x2, y2 = face["bbox"]
-                if name != "Desconocido":
-                     await self._actualizar_estado_persona(name, emocion, str(self.cam_id))
-                
 
-                color     = (50, 255, 80) if name != "Desconocido" else (80, 50, 255)
+                if name != "Desconocido":
+                    await self._actualizar_estado_persona(name, emocion, str(self.cam_id))
+
+                color = (0, 255, 100) if name != "desconocido" else (255, 80, 80)
                 color_sec = (20, 180, 20) if name != "Desconocido" else (20, 20, 180)
 
-                # ---- validación + registro + guardado ----
+                # ---- validación + registro + guardado (solo para conocidos en modos apropiados) ----
                 if es_rostro_valido(r, proc_frame):
                     ahora = datetime.now()
                     fecha_str = ahora.strftime("%Y-%m-%d")
                     hora_str = ahora.strftime("%H:%M:%S")
-                    estado = "Falto"  # Default
+                    estado = "Falto"  # Default, solo se usa en asistencia
 
                     if name != "Desconocido" and self.modo == "asistencia":
+                        # Calcular estado para conocidos en asistencia
                         dep_id = self.dep_por_persona.get(name)
                         if dep_id is not None and dep_id in self.horas_por_departamento:
                             horas_dep = self.horas_por_departamento[dep_id]
@@ -684,21 +702,19 @@ class RecognitionSession:
                             else:
                                 estado = "Falto"
                         else:
-                            # Fallback si no hay dep o caché
+                            # Fallback
                             estado = ("Temprano" if ahora.time() <= dtime(8,10) else "Tarde" if ahora.time() <= dtime(14,30) else "Falto")
 
-                    if name != "Desconocido" and name not in self._registrados_hoy[self.user_id] and self.modo != "normal":
-                        self._registrados_hoy[self.user_id].add(name)
-
-                        # guardar recorte
-                        folder = self.directorio_capturas / self._sanitize_filename(name)
-                        folder.mkdir(parents=True, exist_ok=True)
-                        fname  = f"{self._sanitize_filename(name)}_{fecha_str}_{hora_str.replace(':','-')}.jpg"
-                        path   = folder / fname
-                        cv2.imwrite(str(path), proc_frame[y1:y2, x1:x2])
-
-                        # registrar en BD
-                        if self.modo == "asistencia":
+                        # Registrar solo si no ya registrado hoy
+                        if name not in self._registrados_hoy[self.user_id]:
+                            self._registrados_hoy[self.user_id].add(name)
+                            # Guardar recorte
+                            folder = self.directorio_capturas / self._sanitize_filename(name)
+                            folder.mkdir(parents=True, exist_ok=True)
+                            fname = f"{self._sanitize_filename(name)}_{fecha_str}_{hora_str.replace(':','-')}.jpg"
+                            path = folder / fname
+                            cv2.imwrite(str(path), proc_frame[y1:y2, x1:x2])
+                            # Registrar en BD
                             self._registrar_asistencia(
                                 persona_nombre=name,
                                 estado=estado,
@@ -707,28 +723,30 @@ class RecognitionSession:
                                 fecha=fecha_str,
                                 hora=hora_str
                             )
-                        elif self.modo == "salida":
-                            self._registrar_salida(
-                                persona_nombre=name,
-                                path_foto=str(path).replace("\\", "/"),
-                                fecha=fecha_str,
-                                hora=hora_str
-                            )
+
+                    elif name != "Desconocido" and self.modo == "salida":
+                        # Para salidas: registrar cada detección (sin chequeo de "ya registrado")
+                        # Guardar recorte
+                        folder = self.directorio_capturas / self._sanitize_filename(name)
+                        folder.mkdir(parents=True, exist_ok=True)
+                        fname = f"{self._sanitize_filename(name)}_{fecha_str}_{hora_str.replace(':','-')}.jpg"
+                        path = folder / fname
+                        cv2.imwrite(str(path), proc_frame[y1:y2, x1:x2])
+                        # Registrar en BD
+                        self._registrar_salida(
+                            persona_nombre=name,
+                            path_foto=str(path).replace("\\", "/"),
+                            fecha=fecha_str,
+                            hora=hora_str
+                        )
 
                 # ---- dibujos siempre ----
                 dibujar_esquinas(proc_frame, x1, y1, x2, y2, color)
                 dibujar_landmarks(proc_frame, (x1,y1,x2,y2), self.face_mesh)
-                cv2.rectangle(proc_frame, (x1, y1 - 35), (x2, y1), color_sec, -1)
-                cv2.rectangle(proc_frame, (x1, y1 - 35), (x2, y1), color, 1)
-                cv2.putText(proc_frame, f"{name} ({emocion})", (x1+5, y1-12),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255,255,255), 1)
-                if name != "Desconocido" and name in self._registrados_hoy[self.user_id]:
-                    cv2.putText(proc_frame, " Registrado", (x1+5, y1-45),
-                                cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0,255,0), 2)
 
                 # ---- info para frontend ----
-                face["foto_path"]  = self.fotos.get(name) if name!="Desconocido" else None
-                face["registrado"] = name!="Desconocido" and name in self._registrados_hoy[self.user_id]
+                face["foto_path"] = self.fotos.get(name) if name != "desconocido" else None
+                face["registrado"] = name != "Desconocido" and name in self._registrados_hoy[self.user_id]
                 final_faces.append(face)
                 
             # Calcula summary
@@ -744,8 +762,9 @@ class RecognitionSession:
 
             # Conteo current emociones
             for face in final_faces:
-                emocion = face["emocion"]
-                name = face["nombre"]
+                emocion = face["emocion"]               
+                name = face["nombre"].lower()  # Normaliza name para get()
+                print(f"[DEBUG] Buscando foto para name normalizado '{name}': {self.fotos.get(name)}")
                 summary["emociones_conteo"][emocion] = summary["emociones_conteo"].get(emocion, 0) + 1
                 if name == "Desconocido":
                     summary["visitantes"][emocion] = summary["visitantes"].get(emocion, 0) + 1

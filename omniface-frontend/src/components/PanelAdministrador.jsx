@@ -15,6 +15,7 @@ import ReconocimientoFacial from "../pages/ReconocimientoFacial";
 import HistorialAsistencia from "../pages/HistorialAsistencia";
 import Configuracion from "../pages/Configuracion";
 import Notificacion from "../pages/Notificacion";
+import HistorialSalida from "../pages/HistorialSalida";
 import MiniReconPreview from "../components/MiniReconPreview";
 import EmocionesVivo from "../pages/EmocionesVivo";
 import LocationVivo from "../pages/LocationVivo";
@@ -73,6 +74,7 @@ export default function PanelAdministrador() {
       case "GenerarModelo": return <GenerarModelo />;
       case "ReconocimientoFacial": return <ReconocimientoFacial />;
       case "HistorialAsistencia": return <HistorialAsistencia />;
+      case "HistorialSalidas": return <HistorialSalida />;
       case "DashboardEstadistico": return null;  // Nada, solo expand sidebar
       case "EmocionesVivo": return <EmocionesVivo />;
       case "LocationVivo": return <LocationVivo />;

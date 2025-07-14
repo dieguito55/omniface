@@ -121,7 +121,7 @@ def get_estados(token: str = Query(...)):
     conn = mysql.connector.connect(host="localhost", user="root", password="", database="omniface")
     cursor = conn.cursor(dictionary=True)
     cursor.execute("""
-      SELECT p.nombre_completo as nombre, e.emocion_actual as emocion, e.ubicacion_actual as ubicacion
+      SELECT p.nombre_completo as nombre, e.emocion_actual as emocion, e.ubicacion_actual as ubicacion, e.timestamp_ultimo
       FROM estado_persona e
       LEFT JOIN personas p ON e.persona_id = p.id
       WHERE p.usuario_id = %s

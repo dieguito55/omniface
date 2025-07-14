@@ -18,6 +18,7 @@ const opciones = [
   { label: "Generar Modelo", icon: <FaClock />, key: "GenerarModelo" },
   { label: "Reconocimiento Facial", icon: <FaCamera />, key: "ReconocimientoFacial" },
   { label: "Historial", icon: <FaHistory />, key: "HistorialAsistencia" },
+  { label: "Historial Salidas", icon: <FaHistory />, key: "HistorialSalidas" },
   { 
     label: "Dashboard Estadístico", 
     icon: <FaChartBar />, 

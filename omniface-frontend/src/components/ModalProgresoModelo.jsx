@@ -142,7 +142,7 @@ useEffect(() => {
               {personaActual.imagen_url ? (
                 <>
                   <img
-                    src={`http://192.168.100.42:8000${personaActual.imagen_url}`}
+                    src={`http://192.168.0.104:8000${personaActual.imagen_url}`}
                     alt={personaActual.nombre}
                     className="w-full h-full object-cover"
                   />

@@ -160,7 +160,7 @@ export default function GestionPersonas() {
       codigo_app: persona.codigo_app,
       imagen: null,
     });
-    setImagenPrevia(`http://192.168.100.42:8000${persona.imagen_url}`);
+    setImagenPrevia(`http://192.168.0.104:8000${persona.imagen_url}`);
     cargarDepartamentos();
   };
 
@@ -340,7 +340,7 @@ export default function GestionPersonas() {
                       <div className="flex items-center gap-4">
                         <div className="relative">
                           <img
-                            src={`http://192.168.100.42:8000${p.imagen_url}`}
+                            src={`http://192.168.0.104:8000${p.imagen_url}`}
                             alt="foto"
                             className="h-16 w-16 object-cover rounded-full border-4 border-[#a0c4ff] shadow-md"
                           />
@@ -407,7 +407,7 @@ export default function GestionPersonas() {
                           <td className="px-4 py-3 whitespace-nowrap">
                             <div className="relative">
                               <img
-                                src={`http://192.168.100.42:8000${p.imagen_url}`}
+                                src={`http://192.168.0.104:8000${p.imagen_url}`}
                                 alt="foto"
                                 className="h-12 w-12 object-cover rounded-full border-2 border-[#a0c4ff] shadow-sm"
                               />

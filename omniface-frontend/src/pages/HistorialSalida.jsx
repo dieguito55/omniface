@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import api from "../api/api";
-import { FaSearch, FaHistory, FaUndo, FaUserClock, FaUsers, FaUser, FaCalendarAlt, FaClock, FaBuilding, FaCheckCircle, FaExclamationTriangle, FaQuestionCircle } from "react-icons/fa";
+import { FaSearch, FaHistory, FaUndo, FaUser, FaUsers, FaCalendarAlt, FaClock, FaBuilding, FaSignOutAlt } from "react-icons/fa";
 import { motion, AnimatePresence } from "framer-motion";
 
-export default function HistorialAsistencia() {
+export default function HistorialSalida() {
   const [datos, setDatos] = useState([]);
   const [filteredDatos, setFilteredDatos] = useState([]);
   const [filterDate, setFilterDate] = useState(new Date().toISOString().split('T')[0]);
@@ -19,7 +19,7 @@ export default function HistorialAsistencia() {
     const usuario_id = payload.id;
 
     setIsLoading(true);
-    api.get(`/asistencia/dia/${usuario_id}`)
+    api.get(`/salida/dia/${usuario_id}`)
       .then(r => {
         setDatos(r.data);
         applyFilters(r.data);
@@ -39,7 +39,7 @@ export default function HistorialAsistencia() {
       const payload = JSON.parse(atob(token.split('.')[1]));
       const usuario_id = payload.id;
 
-      api.get(`/asistencia/historial/${usuario_id}`)
+      api.get(`/salida/historial/${usuario_id}`)
         .then(r => {
           setDatos(r.data);
           setFullDataLoaded(true);
@@ -103,8 +103,8 @@ export default function HistorialAsistencia() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h2 className="text-3xl font-bold text-[#1e2c4a] flex items-center gap-3">
-            <FaUserClock className="text-[#3b2f5e]" />
-            Historial de Asistencia
+            <FaSignOutAlt className="text-[#3b2f5e]" />
+            Historial de Salidas
           </h2>
           <p className="text-[#3b2f5e] opacity-80">
             {viewMode === "today" ? "Registros de hoy" : 
@@ -213,8 +213,6 @@ export default function HistorialAsistencia() {
                   <tr>
                     <th className="p-4 text-left text-sm font-medium text-[#1e2c4a]">Foto</th>
                     <th className="p-4 text-left text-sm font-medium text-[#1e2c4a]">Nombre</th>
-                    <th className="p-4 text-left text-sm font-medium text-[#1e2c4a]">Estado</th>
-                    <th className="p-4 text-left text-sm font-medium text-[#1e2c4a]">Tipo</th>
                     <th className="p-4 text-left text-sm font-medium text-[#1e2c4a]">Fecha</th>
                     <th className="p-4 text-left text-sm font-medium text-[#1e2c4a]">Hora</th>
                     <th className="p-4 text-left text-sm font-medium text-[#1e2c4a]">Acciones</th>
@@ -237,26 +235,6 @@ export default function HistorialAsistencia() {
                         )}
                       </td>
                       <td className="p-4 font-medium text-[#1e2c4a]">{d.nombre}</td>
-                      <td className="p-4">
-                        <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${
-                          d.estado === 'Temprano' ? 'bg-green-100 text-green-800' :
-                          d.estado === 'Tarde' ? 'bg-yellow-100 text-yellow-800' :
-                          'bg-red-100 text-red-800'
-                        }`}>
-                          {d.estado === 'Temprano' ? <FaCheckCircle className="mr-1" /> :
-                           d.estado === 'Tarde' ? <FaExclamationTriangle className="mr-1" /> :
-                           <FaQuestionCircle className="mr-1" />}
-                          {d.estado}
-                        </span>
-                      </td>
-                      <td className="p-4">
-                        <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${
-                          d.tipo === 'Conocido' ? 'bg-blue-100 text-blue-800' :
-                          'bg-gray-100 text-gray-800'
-                        }`}>
-                          {d.tipo}
-                        </span>
-                      </td>
                       <td className="p-4 text-[#3b2f5e]">{d.fecha}</td>
                       <td className="p-4 text-[#3b2f5e]">{d.hora}</td>
                       <td className="p-4">
@@ -284,7 +262,7 @@ export default function HistorialAsistencia() {
         >
           <div className="bg-gradient-to-r from-[#1e2c4a] to-[#3b2f5e] px-5 py-3 flex items-center gap-3">
             <FaUser className="text-white" />
-            <h3 className="text-lg font-semibold text-white">Historial de {selectedPerson}</h3>
+            <h3 className="text-lg font-semibold text-white">Historial de Salidas - {selectedPerson}</h3>
             <span className="ml-auto bg-white/20 text-white px-2 py-1 rounded-full text-xs">
               {filteredDatos.length} {filteredDatos.length === 1 ? 'registro' : 'registros'}
             </span>
@@ -296,8 +274,6 @@ export default function HistorialAsistencia() {
                 <tr>
                   <th className="p-4 text-left text-sm font-medium text-[#1e2c4a]">Foto</th>
                   <th className="p-4 text-left text-sm font-medium text-[#1e2c4a]">Departamento</th>
-                  <th className="p-4 text-left text-sm font-medium text-[#1e2c4a]">Estado</th>
-                  <th className="p-4 text-left text-sm font-medium text-[#1e2c4a]">Tipo</th>
                   <th className="p-4 text-left text-sm font-medium text-[#1e2c4a]">Fecha</th>
                   <th className="p-4 text-left text-sm font-medium text-[#1e2c4a]">Hora</th>
                 </tr>
@@ -319,26 +295,6 @@ export default function HistorialAsistencia() {
                       )}
                     </td>
                     <td className="p-4 text-[#3b2f5e]">{d.departamento || "N/A"}</td>
-                    <td className="p-4">
-                      <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${
-                        d.estado === 'Temprano' ? 'bg-green-100 text-green-800' :
-                        d.estado === 'Tarde' ? 'bg-yellow-100 text-yellow-800' :
-                        'bg-red-100 text-red-800'
-                      }`}>
-                        {d.estado === 'Temprano' ? <FaCheckCircle className="mr-1" /> :
-                         d.estado === 'Tarde' ? <FaExclamationTriangle className="mr-1" /> :
-                         <FaQuestionCircle className="mr-1" />}
-                        {d.estado}
-                      </span>
-                    </td>
-                    <td className="p-4">
-                      <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${
-                        d.tipo === 'Conocido' ? 'bg-blue-100 text-blue-800' :
-                        'bg-gray-100 text-gray-800'
-                      }`}>
-                        {d.tipo}
-                      </span>
-                    </td>
                     <td className="p-4 text-[#3b2f5e]">{d.fecha}</td>
                     <td className="p-4 text-[#3b2f5e]">{d.hora}</td>
                   </motion.tr>

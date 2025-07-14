@@ -63,3 +63,21 @@ def historial(usuario_id: int):
     finally:
         cur.close()
         conn.close()
+@router.get("/salida/historial/{usuario_id}")
+def salidas_historial(usuario_id: int):
+    try:
+        conn = mysql.connector.connect(host="localhost", user="root", password="", database="omniface")
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("""
+            SELECT s.nombre, s.foto_path, s.fecha, s.hora, d.nombre AS departamento
+            FROM salidas s
+            LEFT JOIN departamentos d ON s.departamento_id = d.id
+            WHERE s.usuario_id = %s
+            ORDER BY s.fecha DESC, s.hora DESC
+        """, (usuario_id,))
+        resultados = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        return resultados
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

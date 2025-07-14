@@ -2,7 +2,16 @@ import { useEffect, useState, useMemo } from "react";
 import { motion } from "framer-motion";
 import { useRecon } from "../context/ReconContext";
 import { useGlobalRecon } from "../context/GlobalReconContext";
-import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from "recharts";
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+} from "recharts";
+import { FaSmile, FaUsers, FaArrowTrendUp } from "react-icons/fa6";
 import api from "../api/api";
 
 export default function EmocionesVivo() {
@@ -21,16 +30,18 @@ export default function EmocionesVivo() {
   const [fromBD, setFromBD] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // Fetch data from backend
   useEffect(() => {
     let isMounted = true;
 
     const fetchBD = async () => {
       try {
-        const token = localStorage.getItem("access_token")?.replace(/^Bearer\s+/i, "") || "";
+        const token =
+          localStorage.getItem("access_token")?.replace(/^Bearer\s+/i, "") ||
+          "";
         const res = await api.get(`/recon/estados?token=${token}`);
         if (isMounted) {
-          setFromBD(res.data || []);
+          const data = res.data || [];
+          setFromBD(data);
           setLoading(false);
         }
       } catch (e) {
@@ -40,26 +51,49 @@ export default function EmocionesVivo() {
     };
 
     fetchBD();
-    const interval = setInterval(fetchBD, 5000);
+    const interval = setInterval(fetchBD, 1000);
     return () => {
       isMounted = false;
       clearInterval(interval);
     };
   }, []);
 
-  // Merge summaries with memoization
   const mergedSummary = useMemo(() => {
-    const newSummary = { ...recon0.data.summary };
-    if (numCamaras >= 2) {
-      Object.assign(newSummary, recon1.data.summary);
-    }
-    if (numCamaras >= 3) {
-      Object.assign(newSummary, recon2.data.summary);
-    }
-    return newSummary;
-  }, [recon0.data.summary, recon1.data.summary, recon2.data.summary, numCamaras]);
+    const summaries = [
+      recon0.data.summary,
+      recon1.data.summary,
+      recon2.data.summary,
+    ].filter((s) => s && Object.keys(s).length > 0);
 
-  // Update summary state only if it has changed
+    const newSummary = {
+      emociones_conteo: {},
+      dominante_por_camara:
+        summaries[summaries.length - 1]?.dominante_por_camara || "",
+      tendencia: summaries[summaries.length - 1]?.tendencia || "",
+      personalizados: {},
+      visitantes: {},
+    };
+
+    summaries.forEach((s) => {
+      Object.entries(s.emociones_conteo || {}).forEach(([key, val]) => {
+        newSummary.emociones_conteo[key] =
+          (newSummary.emociones_conteo[key] || 0) + val;
+      });
+      Object.assign(newSummary.personalizados, s.personalizados || {});
+      Object.entries(s.visitantes || {}).forEach(([key, val]) => {
+        newSummary.visitantes[key] =
+          (newSummary.visitantes[key] || 0) + val;
+      });
+    });
+
+    return newSummary;
+  }, [
+    recon0.data.summary,
+    recon1.data.summary,
+    recon2.data.summary,
+    numCamaras,
+  ]);
+
   useEffect(() => {
     setSummary((prev) => {
       if (JSON.stringify(prev) !== JSON.stringify(mergedSummary)) {
@@ -74,66 +108,132 @@ export default function EmocionesVivo() {
 
   if (loading) {
     return (
-      <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center text-gray-500">
+      <motion.p
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        className="text-center text-gray-500"
+      >
         Cargando datos...
       </motion.p>
     );
   }
 
-  // Combine backend and live data
   const bdConteo = fromBD.reduce((acc, item) => {
     const emocion = item.emocion || "N/A";
-    acc[emocion] = (acc[emocion] || 0) + 1;
+    if (emocion !== "N/A") {
+      acc[emocion] = (acc[emocion] || 0) + 1;
+    }
     return acc;
   }, {});
-  const finalConteo = { ...bdConteo, ...summary.emociones_conteo };
+  const finalConteo = { ...bdConteo };
+  Object.entries(summary.emociones_conteo || {}).forEach(([key, val]) => {
+    finalConteo[key] = (finalConteo[key] || 0) + val;
+  });
 
   if (Object.keys(finalConteo).length === 0) {
-    return <p className="text-center text-gray-500">No hay datos disponibles</p>;
+    return (
+      <p className="text-center text-gray-500">No hay datos disponibles</p>
+    );
   }
 
-  const chartData = Object.entries(finalConteo).map(([emocion, conteo]) => ({ emocion, conteo }));
+  const chartData = Object.entries(finalConteo).map(([emocion, conteo]) => ({
+    emocion,
+    conteo,
+  }));
+
+  const totalEmociones = Object.values(finalConteo).reduce(
+    (sum, val) => sum + val,
+    0
+  );
 
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="p-6 bg-white rounded-lg shadow-xl">
-      <h2 className="text-3xl font-bold mb-6 text-center text-blue-700">Emociones en Vivo</h2>
-      <motion.div initial={{ scale: 0.8 }} animate={{ scale: 1 }} transition={{ duration: 0.5 }}>
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      className="p-8 rounded-xl"
+      style={{ backgroundColor: "#1e2c4a", color: "#ffffff" }}
+    >
+      <h2 className="text-4xl font-bold mb-8 text-center text-[#a0c4ff]">
+        Dashboard Emociones Vivo
+      </h2>
+
+      {/* SCORECARDS */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
+        <div className="bg-[#3b2f5e] p-6 rounded-lg shadow-md flex items-center">
+          <FaSmile className="text-[#91baff] text-4xl mr-4" />
+          <div>
+            <p className="text-sm uppercase text-[#a0c4ff]">Total Emociones</p>
+            <p className="text-3xl font-bold">{totalEmociones}</p>
+          </div>
+        </div>
+        <div className="bg-[#3b2f5e] p-6 rounded-lg shadow-md flex items-center">
+          <FaUsers className="text-[#91baff] text-4xl mr-4" />
+          <div>
+            <p className="text-sm uppercase text-[#a0c4ff]">
+              Emoción Dominante
+            </p>
+            <p className="text-2xl font-bold">
+              {summary.dominante_por_camara || "N/A"}
+            </p>
+          </div>
+        </div>
+        <div className="bg-[#3b2f5e] p-6 rounded-lg shadow-md flex items-center">
+          <FaArrowTrendUp className="text-[#91baff] text-4xl mr-4" />
+          <div>
+            <p className="text-sm uppercase text-[#a0c4ff]">Tendencia</p>
+            <p className="text-2xl font-bold">
+              {summary.tendencia || "No disponible"}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* BARCHART */}
+      <div className="bg-[#ffffff] rounded-lg p-6 shadow-md">
         <ResponsiveContainer width="100%" height={300}>
           <BarChart data={chartData}>
-            <XAxis dataKey="emocion" />
-            <YAxis />
+            <XAxis dataKey="emocion" stroke="#1e2c4a" />
+            <YAxis stroke="#1e2c4a" />
             <Tooltip />
             <Legend />
-            <Bar dataKey="conteo" fill="#4CAF50" animationDuration={500} />
+            <Bar dataKey="conteo" fill="#3b2f5e" />
           </BarChart>
         </ResponsiveContainer>
-      </motion.div>
-      <p className="mt-4 text-lg">Emoción dominante por cámara: {summary.dominante_por_camara || "No hay datos"}</p>
-      <p className="mt-2 text-lg">Tendencia reciente: {summary.tendencia || "No hay tendencia"}</p>
-      <div className="grid grid-cols-2 gap-4 mt-6">
-        <div>
-          <h3 className="font-bold mb-2">Conocidos</h3>
-          <table className="w-full">
+      </div>
+
+      {/* TABLAS */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-10">
+        <div className="bg-[#3b2f5e] p-6 rounded-lg">
+          <h3 className="text-lg font-bold mb-4 text-[#a0c4ff]">
+            Conocidos
+          </h3>
+          <table className="w-full text-left">
             <tbody>
-              {Object.entries(summary.personalizados || {}).map(([name, info]) => (
-                <tr key={name}>
-                  <td>{name}</td>
-                  <td>{info}</td>
-                </tr>
-              ))}
+              {Object.entries(summary.personalizados || {}).map(
+                ([name, info]) => (
+                  <tr key={name} className="border-b border-[#a0c4ff]/20">
+                    <td className="py-2">{name}</td>
+                    <td className="py-2">{info}</td>
+                  </tr>
+                )
+              )}
             </tbody>
           </table>
         </div>
-        <div>
-          <h3 className="font-bold mb-2">Visitantes</h3>
-          <table className="w-full">
+        <div className="bg-[#3b2f5e] p-6 rounded-lg">
+          <h3 className="text-lg font-bold mb-4 text-[#a0c4ff]">
+            Visitantes
+          </h3>
+          <table className="w-full text-left">
             <tbody>
-              {Object.entries(summary.visitantes || {}).map(([emoc, count]) => (
-                <tr key={emoc}>
-                  <td>{emoc}</td>
-                  <td>{count}</td>
-                </tr>
-              ))}
+              {Object.entries(summary.visitantes || {}).map(
+                ([emoc, count]) => (
+                  <tr key={emoc} className="border-b border-[#a0c4ff]/20">
+                    <td className="py-2">{emoc}</td>
+                    <td className="py-2">{count}</td>
+                  </tr>
+                )
+              )}
             </tbody>
           </table>
         </div>

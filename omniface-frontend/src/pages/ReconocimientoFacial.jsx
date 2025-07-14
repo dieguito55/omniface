@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { FiRefreshCw, FiRotateCcw, FiRotateCw, FiSettings, FiCamera, FiLayout } from "react-icons/fi";
 import api from "../api/api.js";
 import ReconCamInner from "../components/ReconCamInner";
 import AsistenciasHoy from "../components/AsistenciasHoy";
@@ -13,6 +14,7 @@ export default function ReconocimientoFacial() {
     const cached = localStorage.getItem("cachedCameras");
     return cached ? JSON.parse(cached) : [];
   });
+  const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
     if (!cams.length) {
@@ -20,31 +22,41 @@ export default function ReconocimientoFacial() {
     }
   }, []);
 
-  const loadCameras = (force = false) => {
-    api
-      .get(`/recon/camaras?force=${force}`)
-      .then((r) => {
-        setCams(r.data.camaras);
-        localStorage.setItem("cachedCameras", JSON.stringify(r.data.camaras));
-      })
-      .catch(() => setCams([]));
+  const loadCameras = async (force = false) => {
+    setIsLoading(true);
+    try {
+      const response = await api.get(`/recon/camaras?force=${force}`);
+      setCams(response.data.camaras);
+      localStorage.setItem("cachedCameras", JSON.stringify(response.data.camaras));
+    } catch (error) {
+      console.error("Error loading cameras:", error);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const reloadModel = () => {
+  const reloadModel = async () => {
     const token = localStorage.getItem("access_token")?.replace(/^Bearer\s+/i, "");
     if (!token) {
       console.error("Token no encontrado");
       return;
     }
-    api
-      .get(`/recon/reload_model?token=${token}`)
-      .then((r) => console.log(r.data.mensaje))
-      .catch((e) => console.error("Error recargando modelo:", e));
+    
+    try {
+      setIsLoading(true);
+      const response = await api.get(`/recon/reload_model?token=${token}`);
+      console.log(response.data.mensaje);
+      // Mostrar notificación de éxito
+    } catch (error) {
+      console.error("Error recargando modelo:", error);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const reloadCameras = () => {
+  const reloadCameras = async () => {
     localStorage.removeItem("cachedCameras");
-    loadCameras(true);
+    await loadCameras(true);
   };
 
   const handleCamSelect = (index, value) => {
@@ -64,66 +76,45 @@ export default function ReconocimientoFacial() {
   const renderCamera = (i) => {
     const { data } = useRecon(camSelections[i]);
     return (
-      <div className="relative w-full aspect-[16/9] rounded-lg bg-black shadow-md overflow-hidden">
+      <div className="relative w-full aspect-[16/9] rounded-xl bg-gray-900 shadow-xl overflow-hidden border border-gray-700/50">
         {/* Camera Selector */}
-        <div className="absolute right-2 top-2 z-10">
-          <select
-            value={camSelections[i]}
-            onChange={(e) => handleCamSelect(i, e.target.value)}
-            className="rounded-md border-gray-300 bg-white px-2 py-1 text-gray-700 focus:border-blue-500 focus:ring-blue-500 disabled:opacity-50"
-            disabled={data.connected}
-          >
-            {cams.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
+        <div className="absolute right-3 top-3 z-10">
+          <div className="relative">
+            <select
+              value={camSelections[i]}
+              onChange={(e) => handleCamSelect(i, e.target.value)}
+              className="appearance-none rounded-lg border-gray-600 bg-gray-800 px-3 py-1.5 pr-8 text-sm text-white focus:border-blue-500 focus:ring-blue-500 disabled:opacity-50"
+              disabled={data.connected}
+            >
+              {cams.map((c) => (
+                <option key={c.id} value={c.id} className="bg-gray-800">
+                  {c.name}
+                </option>
+              ))}
+            </select>
+            <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2">
+              <FiCamera className="h-4 w-4 text-gray-400" />
+            </div>
+          </div>
         </div>
 
         {/* Rotation Buttons for small cameras */}
         {numCamaras === 3 && i === 1 && (
           <button
             onClick={rotateCCW}
-            className="absolute left-[-20px] top-1/2 z-20 -translate-y-1/2 bg-white/80 text-blue-600 p-2 rounded-full shadow-md hover:bg-white hover:scale-110 transition-all duration-300"
+            className="absolute left-[-18px] top-1/2 z-20 -translate-y-1/2 bg-gray-800 text-blue-400 p-2 rounded-full shadow-lg hover:bg-gray-700 hover:text-blue-300 hover:scale-110 transition-all duration-300 border border-gray-700"
             title="Girar antihorario"
           >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              className="h-5 w-5 scale-x-[-1]"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={2}
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-              />
-            </svg>
+            <FiRotateCcw className="h-4 w-4" />
           </button>
         )}
         {numCamaras === 3 && i === 2 && (
           <button
             onClick={rotateCW}
-            className="absolute left-[-20px] top-1/2 z-20 -translate-y-1/2 bg-white/80 text-blue-600 p-2 rounded-full shadow-md hover:bg-white hover:scale-110 transition-all duration-300"
+            className="absolute left-[-18px] top-1/2 z-20 -translate-y-1/2 bg-gray-800 text-blue-400 p-2 rounded-full shadow-lg hover:bg-gray-700 hover:text-blue-300 hover:scale-110 transition-all duration-300 border border-gray-700"
             title="Girar horario"
           >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              className="h-5 w-5"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={2}
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-              />
-            </svg>
+            <FiRotateCw className="h-4 w-4" />
           </button>
         )}
 
@@ -147,20 +138,20 @@ export default function ReconocimientoFacial() {
   let cameraLayout;
   if (numCamaras === 1) {
     cameraLayout = (
-      <div className="grid gap-2 grid-cols-1 place-items-center w-full">
+      <div className="grid gap-4 grid-cols-1 place-items-center w-full">
         {renderCamera(0)}
       </div>
     );
   } else if (numCamaras === 2) {
     cameraLayout = (
-      <div className="grid gap-2 grid-cols-1 md:grid-cols-2 w-full">
+      <div className="grid gap-4 grid-cols-1 lg:grid-cols-2 w-full">
         {renderCamera(0)}
         {renderCamera(1)}
       </div>
     );
   } else if (numCamaras === 3) {
     cameraLayout = (
-      <div className="grid gap-2 grid-cols-1 md:grid-cols-[2fr_1fr] md:grid-rows-2 w-full md:[&>:first-child]:row-span-2">
+      <div className="grid gap-4 grid-cols-1 lg:grid-cols-[2fr_1fr] lg:grid-rows-2 w-full lg:[&>:first-child]:row-span-2">
         {renderCamera(0)}
         {renderCamera(1)}
         {renderCamera(2)}
@@ -170,60 +161,86 @@ export default function ReconocimientoFacial() {
 
   return (
     <div className="mx-auto max-w-7xl space-y-4 px-4 py-4 sm:px-6 lg:px-8">
-      {/* Control Panel */}
-      <div className="flex flex-wrap items-center gap-4 rounded-lg bg-white p-4 shadow-sm">
-        <div className="flex items-center gap-2">
-          <label className="font-medium text-gray-700">Cámaras:</label>
-          <select
-            value={numCamaras}
-            onChange={(e) => setNumCamaras(parseInt(e.target.value))}
-            className="rounded-md border-gray-300 bg-white px-2 py-1 text-gray-700 focus:border-blue-500 focus:ring-blue-500"
-          >
-            <option value={1}>1</option>
-            <option value={2}>2</option>
-            <option value={3}>3</option>
-          </select>
+      {/* Control Panel - Rediseñado profesional */}
+      <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl bg-gray-800 p-4 shadow-lg border border-gray-700/50">
+        <div className="flex items-center gap-4">
+          <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+            <FiSettings className="text-blue-400" />
+            <span>Panel de Control</span>
+          </h2>
+          
+          <div className="flex items-center gap-2">
+            <FiLayout className="text-gray-400" />
+            <select
+              value={numCamaras}
+              onChange={(e) => setNumCamaras(parseInt(e.target.value))}
+              className="rounded-lg border-gray-600 bg-gray-700 px-3 py-1.5 text-sm text-white focus:border-blue-500 focus:ring-blue-500"
+            >
+              <option value={1} className="bg-gray-800">1 Cámara</option>
+              <option value={2} className="bg-gray-800">2 Cámaras</option>
+              <option value={3} className="bg-gray-800">3 Cámaras</option>
+            </select>
+          </div>
+          
+          <div className="flex items-center gap-2">
+            <FiCamera className="text-gray-400" />
+            <select
+              value={modo}
+              onChange={(e) => setModo(e.target.value)}
+              className="rounded-lg border-gray-600 bg-gray-700 px-3 py-1.5 text-sm text-white focus:border-blue-500 focus:ring-blue-500"
+            >
+              <option value="asistencia" className="bg-gray-800">Modo Asistencia</option>
+              <option value="normal" className="bg-gray-800">Modo Normal</option>
+              <option value="salida" className="bg-gray-800">Modo Salida</option>
+            </select>
+          </div>
         </div>
+        
         <div className="flex items-center gap-2">
-          <label className="font-medium text-gray-700">Modo:</label>
-          <select
-            value={modo}
-            onChange={(e) => setModo(e.target.value)}
-            className="rounded-md border-gray-300 bg-white px-2 py-1 text-gray-700 focus:border-blue-500 focus:ring-blue-500"
+          <button
+            onClick={reloadModel}
+            disabled={isLoading}
+            className="flex items-center gap-2 rounded-lg bg-blue-600/90 px-4 py-1.5 text-sm font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-800 transition-all disabled:opacity-50"
           >
-            <option value="asistencia">Asistencia</option>
-            <option value="normal">Normal</option>
-            <option value="salida">Salida</option>
-          </select>
+            <FiRefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+            <span>Recargar Modelo</span>
+          </button>
+          
+          <button
+            onClick={reloadCameras}
+            disabled={isLoading}
+            className="flex items-center gap-2 rounded-lg bg-emerald-600/90 px-4 py-1.5 text-sm font-medium text-white hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 focus:ring-offset-gray-800 transition-all disabled:opacity-50"
+          >
+            <FiRefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+            <span>Recargar Cámaras</span>
+          </button>
         </div>
-        <button
-          onClick={reloadModel}
-          className="rounded-md bg-blue-600 px-4 py-1 text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-        >
-          Recargar Modelo
-        </button>
-        <button
-          onClick={reloadCameras}
-          className="rounded-md bg-green-600 px-4 py-1 text-white hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500"
-        >
-          Recargar Cámaras
-        </button>
       </div>
 
       {/* Camera Layout */}
       {cameraLayout}
 
       {/* Mode-Specific Panels */}
-      {modo === "asistencia" && (
-        <div className="overflow-x-auto rounded-lg bg-white p-4 shadow-sm w-full">
-          <AsistenciasHoy />
-        </div>
-      )}
-      {modo === "salida" && (
-        <div className="overflow-x-auto rounded-lg bg-white p-4 shadow-sm w-full">
-          <SalidasHoy />
-        </div>
-      )}
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={modo}
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -20 }}
+          transition={{ duration: 0.3 }}
+        >
+          {modo === "asistencia" && (
+            <div className="overflow-hidden rounded-xl bg-gray-800 shadow-lg border border-gray-700/50">
+              <AsistenciasHoy />
+            </div>
+          )}
+          {modo === "salida" && (
+            <div className="overflow-hidden rounded-xl bg-gray-800 shadow-lg border border-gray-700/50">
+              <SalidasHoy />
+            </div>
+          )}
+        </motion.div>
+      </AnimatePresence>
     </div>
   );
 }
