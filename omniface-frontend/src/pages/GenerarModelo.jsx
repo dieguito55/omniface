@@ -13,7 +13,10 @@ import {
   FaDatabase,
   FaCamera,
   FaTimes,
-  FaSpinner
+  FaSpinner,
+  FaMagic,
+  FaCheckCircle,
+  FaInfoCircle
 } from "react-icons/fa";
 import Plot from "react-plotly.js";
 import api from "../api/api";
@@ -125,61 +128,82 @@ export default function GenerarModelo() {
   };
 
   const renderStatusCards = () => {
-    if (!state.status) return <p className="text-gray-600">Cargando estado…</p>;
+    if (!state.status) return (
+      <div className="flex justify-center py-10">
+        <div className="animate-pulse flex space-x-4">
+          <div className="flex-1 space-y-4 py-1">
+            <div className="h-16 bg-gradient-to-r from-[#a0c4ff] to-[#8cc1ff] rounded-lg"></div>
+          </div>
+        </div>
+      </div>
+    );
 
     return (
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mb-10">
         <StatusCard 
-          icon={<FaUsers className="text-blue-500" />}
+          icon={<FaUsers className="text-[#3b2f5e]" size={24} />}
           title="Total de personas"
           value={state.status.total}
-          color="blue"
+          color="primary"
+          description="Personas registradas en el sistema"
         />
         <StatusCard
           icon={<FaUserCheck className={
             state.status.total === state.status.mejoradas ? 
             "text-green-500" : "text-yellow-500"
-          } />}
-          title="Con imagen optimizada"
+          } size={24} />}
+          title="Imágenes optimizadas"
           value={`${state.status.mejoradas} / ${state.status.total}`}
-          color={state.status.total === state.status.mejoradas ? "green" : "yellow"}
+          color={state.status.total === state.status.mejoradas ? "success" : "warning"}
           extra={state.status.total === state.status.mejoradas ? 
-            "✔️ Listo óptimo" : "⛔ Faltan imágenes"}
+            <span className="flex items-center text-green-600 text-sm mt-1">
+              <FaCheckCircle className="mr-1" /> Listo para entrenar
+            </span> : 
+            <span className="flex items-center text-yellow-600 text-sm mt-1">
+              <FaExclamationTriangle className="mr-1" /> Faltan optimizar imágenes
+            </span>
+          }
+          description="Imágenes preparadas para el modelo"
         />
         <StatusCard
-          icon={<FaClock className="text-purple-500" />}
+          icon={<FaClock className="text-[#3b2f5e]" size={24} />}
           title="Última generación"
-          value={state.status.ultima_fecha || "Nunca"}
-          color="purple"
+          value={state.status.ultima_fecha ? new Date(state.status.ultima_fecha).toLocaleString() : "Nunca"}
+          color="primary"
+          description="Fecha del último entrenamiento"
         />
         <StatusCard
           icon={<FaCamera className={
             state.status.ultima_fecha ? "text-green-500" : "text-gray-400"
-          } />}
-          title="Reconocimiento facial"
-          value={state.status.ultima_fecha ? "Listo para usar" : "No disponible"}
-          color={state.status.ultima_fecha ? "green" : "gray"}
+          } size={24} />}
+          title="Estado del modelo"
+          value={state.status.ultima_fecha ? "Activo y listo" : "No entrenado"}
+          color={state.status.ultima_fecha ? "success" : "gray"}
           extra={
             state.status.ultima_fecha ? (
-              <button 
+              <motion.button 
                 onClick={navigateToRecognition}
-                className="text-xs font-semibold mt-1 text-green-600 hover:underline"
+                whileHover={{ scale: 1.03 }}
+                whileTap={{ scale: 0.97 }}
+                className="text-sm font-semibold mt-2 bg-[#3b2f5e] text-white px-3 py-1 rounded-lg flex items-center gap-1 hover:bg-[#1e2c4a] transition-colors"
               >
-                Ir a reconocimiento en vivo →
-              </button>
+                Probar reconocimiento <FaMagic className="ml-1" />
+              </motion.button>
             ) : (
               <span className="text-xs text-gray-500">
                 Entrena el modelo primero
               </span>
             )
           }
+          description="Estado del reconocimiento facial"
         />
       </div>
     );
   };
 
   return (
-    <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      {/* Header con gradiente y sombra */}
       <div className="flex justify-between items-center mb-8">
         <motion.div 
           initial={{ opacity: 0, x: -20 }}
@@ -187,12 +211,15 @@ export default function GenerarModelo() {
           transition={{ duration: 0.5 }}
           className="flex items-center gap-4"
         >
-          <div className="p-3 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 shadow-lg">
+          <div className="p-3 rounded-lg bg-gradient-to-br from-[#3b2f5e] to-[#1e2c4a] shadow-lg">
             <FaCogs className="text-white text-2xl" />
           </div>
-          <h2 className="text-3xl font-bold text-gray-800">
-            Generación de Modelo Facial
-          </h2>
+          <div>
+            <h2 className="text-3xl font-bold text-[#1e2c4a]">
+              Entrenamiento del Modelo Facial
+            </h2>
+            <p className="text-[#3b2f5e] opacity-80">Prepara y entrena el sistema de reconocimiento</p>
+          </div>
         </motion.div>
 
         <motion.button
@@ -200,29 +227,57 @@ export default function GenerarModelo() {
           whileTap={{ scale: 0.95 }}
           onClick={toggleDashboard}
           title={state.showDashboard ? "Ocultar dashboard" : "Mostrar dashboard"}
-          className="p-3 rounded-full bg-gradient-to-br from-indigo-600 to-purple-600 text-white shadow-lg hover:shadow-xl transition-all"
+          className="p-3 rounded-full bg-gradient-to-br from-[#3b2f5e] to-[#1e2c4a] text-white shadow-lg hover:shadow-xl transition-all"
         >
           <FaChartBar className="text-xl" />
         </motion.button>
       </div>
 
+      {/* Tarjetas de estado */}
       {renderStatusCards()}
 
-      <div className="flex justify-center mb-10">
-        <motion.button
-          whileHover={{ scale: 1.03 }}
-          whileTap={{ scale: 0.97 }}
-          onClick={() => setState(prev => ({ ...prev, modalVisible: true }))}
-          disabled={!state.status || state.status.total !== state.status.mejoradas}
-          className={`px-8 py-4 rounded-xl text-white text-lg font-bold flex items-center gap-3 shadow-lg transition-all
-            ${state.status && state.status.total === state.status.mejoradas
-              ? "bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700"
-              : "bg-gray-400 cursor-not-allowed"}`}
-        >
-          <FaRobot className="text-xl" /> Generar Nuevo Modelo
-        </motion.button>
+      {/* Sección de acción principal */}
+      <div className="bg-gradient-to-r from-[#f8faff] to-[#e6f0ff] p-6 rounded-xl shadow-sm mb-10">
+        <div className="max-w-2xl mx-auto text-center">
+          <h3 className="text-2xl font-semibold text-[#1e2c4a] mb-3 flex items-center justify-center gap-2">
+            <FaRobot className="text-[#3b2f5e]" /> Entrenar Modelo de Reconocimiento
+          </h3>
+          <p className="text-[#3b2f5e] mb-6">
+            Genera un nuevo modelo con todas las personas registradas. Este proceso analizará 
+            todas las imágenes y creará patrones para el reconocimiento facial.
+          </p>
+          
+          <motion.button
+            whileHover={{ scale: 1.03, boxShadow: "0 10px 25px -5px rgba(59, 47, 94, 0.3)" }}
+            whileTap={{ scale: 0.97 }}
+            onClick={() => setState(prev => ({ ...prev, modalVisible: true }))}
+            disabled={!state.status || state.status.total !== state.status.mejoradas}
+            className={`px-8 py-4 rounded-xl text-white text-lg font-bold flex items-center justify-center gap-3 shadow-lg transition-all mx-auto
+              ${state.status && state.status.total === state.status.mejoradas
+                ? "bg-gradient-to-r from-[#3b2f5e] to-[#1e2c4a] hover:from-[#1e2c4a] hover:to-[#3b2f5e]"
+                : "bg-gray-300 cursor-not-allowed"}`}
+          >
+            {state.status && state.status.total !== state.status.mejoradas ? (
+              <>
+                <FaExclamationTriangle /> Optimiza las imágenes primero
+              </>
+            ) : (
+              <>
+                <FaRobot /> Iniciar Entrenamiento
+              </>
+            )}
+          </motion.button>
+          
+          {state.status && state.status.total !== state.status.mejoradas && (
+            <div className="mt-4 p-3 bg-yellow-50 rounded-lg text-yellow-700 text-sm flex items-start gap-2 max-w-md mx-auto">
+              <FaInfoCircle className="mt-0.5 flex-shrink-0" />
+              <p>Debes optimizar todas las imágenes antes de poder entrenar el modelo.</p>
+            </div>
+          )}
+        </div>
       </div>
 
+      {/* Dashboard de analytics */}
       <AnimatePresence>
         {state.showDashboard && state.analytics && (
           <motion.div
@@ -236,6 +291,7 @@ export default function GenerarModelo() {
         )}
       </AnimatePresence>
 
+      {/* Modales */}
       <AnimatePresence>
         {state.modalVisible && (
           <ConfirmationModal
@@ -262,29 +318,31 @@ export default function GenerarModelo() {
   );
 }
 
-function StatusCard({ icon, title, value, color, extra }) {
+function StatusCard({ icon, title, value, color, extra, description }) {
   const colorMap = {
-    blue: "from-blue-100 to-blue-50 border-blue-200",
-    green: "from-green-100 to-green-50 border-green-200",
-    yellow: "from-yellow-100 to-yellow-50 border-yellow-200",
-    purple: "from-purple-100 to-purple-50 border-purple-200",
+    primary: "from-[#a0c4ff] to-[#8cc1ff] border-[#7fb3ff]",
+    success: "from-green-100 to-green-50 border-green-200",
+    warning: "from-yellow-100 to-yellow-50 border-yellow-200",
     gray: "from-gray-100 to-gray-50 border-gray-200"
   };
 
   return (
     <motion.div 
-      whileHover={{ y: -5 }}
-      className={`bg-gradient-to-br ${colorMap[color]} p-5 rounded-xl border-l-4 shadow-sm`}
+      whileHover={{ y: -5, boxShadow: "0 10px 15px -3px rgba(0,0,0,0.1)" }}
+      className={`bg-gradient-to-b ${colorMap[color]} p-5 rounded-xl border-l-4 shadow-sm h-full flex flex-col`}
     >
       <div className="flex items-start gap-4">
-        <div className="p-2 rounded-lg bg-white shadow-sm">
+        <div className="p-3 rounded-lg bg-white shadow-sm flex items-center justify-center">
           {icon}
         </div>
-        <div>
-          <h3 className="text-sm font-medium text-gray-600">{title}</h3>
-          <p className="text-xl font-bold text-gray-800 mt-1">{value}</p>
+        <div className="flex-1">
+          <h3 className="text-sm font-medium text-[#1e2c4a] opacity-80">{title}</h3>
+          <p className="text-2xl font-bold text-[#1e2c4a] mt-1">{value}</p>
+          {description && (
+            <p className="text-xs text-[#3b2f5e] opacity-70 mt-1">{description}</p>
+          )}
           {extra && (
-            <div className="mt-1">
+            <div className="mt-2">
               {extra}
             </div>
           )}
@@ -303,11 +361,14 @@ function ConfirmationModal({ onCancel, onConfirm, generating, error }) {
         exit={{ scale: 0.9, opacity: 0 }}
         className="bg-white rounded-xl shadow-2xl w-full max-w-md relative overflow-hidden"
       >
-        <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-indigo-500 to-purple-500"></div>
+        <div className="absolute inset-x-0 top-0 h-2 bg-gradient-to-r from-[#3b2f5e] to-[#1e2c4a]"></div>
         
         <div className="p-6">
           <div className="flex justify-between items-start mb-4">
-            <h3 className="text-2xl font-bold text-gray-800">Confirmar generación</h3>
+            <div>
+              <h3 className="text-2xl font-bold text-[#1e2c4a]">Confirmar entrenamiento</h3>
+              <p className="text-sm text-[#3b2f5e] opacity-70">Proceso de generación del modelo</p>
+            </div>
             <button
               onClick={onCancel}
               className="text-gray-400 hover:text-gray-600 transition-colors"
@@ -319,45 +380,54 @@ function ConfirmationModal({ onCancel, onConfirm, generating, error }) {
           <div className="space-y-4">
             <p className="text-gray-600">
               Estás a punto de generar un nuevo modelo facial con todas las personas registradas. 
-              Este proceso puede tardar varios minutos.
+              Este proceso puede tardar varios minutos dependiendo del número de personas.
             </p>
             
-            <div className="flex items-center gap-3 p-3 bg-blue-50 rounded-lg border border-blue-100">
-              <FaDatabase className="text-blue-500 flex-shrink-0" />
-              <p className="text-sm text-blue-700">
-                Se generarán embeddings faciales para cada persona y se indexarán en FAISS.
-              </p>
+            <div className="flex items-start gap-3 p-3 bg-[#f0f6ff] rounded-lg border border-[#d6e4ff]">
+              <FaInfoCircle className="text-[#3b2f5e] mt-0.5 flex-shrink-0" />
+              <div>
+                <p className="text-sm text-[#1e2c4a] font-medium">¿Qué sucederá?</p>
+                <p className="text-xs text-[#3b2f5e] mt-1">
+                  Se analizarán todas las imágenes, se extraerán características faciales 
+                  y se crearán los patrones para el reconocimiento.
+                </p>
+              </div>
             </div>
             
             {error && (
-              <div className="p-3 bg-red-50 rounded-lg border border-red-100 text-red-600">
-                {error}
+              <div className="p-3 bg-red-50 rounded-lg border border-red-100 text-red-600 flex items-start gap-2">
+                <FaExclamationTriangle className="mt-0.5 flex-shrink-0" />
+                <p>{error}</p>
               </div>
             )}
           </div>
           
           <div className="mt-6 flex justify-end gap-3">
-            <button
+            <motion.button
+              whileHover={{ scale: 1.03 }}
+              whileTap={{ scale: 0.97 }}
               onClick={onCancel}
               className="px-4 py-2 rounded-lg bg-gray-200 text-gray-800 hover:bg-gray-300 font-medium transition-colors"
             >
               Cancelar
-            </button>
-            <button
+            </motion.button>
+            <motion.button
+              whileHover={{ scale: 1.03 }}
+              whileTap={{ scale: 0.97 }}
               onClick={onConfirm}
               disabled={generating}
               className={`px-4 py-2 rounded-lg font-medium transition-colors ${
                 generating 
-                  ? "bg-indigo-400 text-white cursor-wait" 
-                  : "bg-indigo-600 text-white hover:bg-indigo-700"
+                  ? "bg-[#91baff] text-white cursor-wait" 
+                  : "bg-gradient-to-r from-[#3b2f5e] to-[#1e2c4a] text-white hover:from-[#1e2c4a] hover:to-[#3b2f5e]"
               }`}
             >
               {generating ? (
                 <span className="flex items-center gap-2">
                   <FaSpinner className="animate-spin" /> Generando...
                 </span>
-              ) : "Confirmar"}
-            </button>
+              ) : "Iniciar Entrenamiento"}
+            </motion.button>
           </div>
         </div>
       </motion.div>
@@ -386,67 +456,92 @@ function EmbeddingsDashboard({ data }) {
     ...data.tsne.map(p => [p.nombre, p.x, p.y, p.cluster])
   ].map(r => r.join(",")).join("\n");
 
-  const clusterColors = ["#3b82f6", "#ec4899", "#10b981", "#f59e0b", "#6366f1"];
+  const clusterColors = ["#3b2f5e", "#1e2c4a", "#7fb3ff", "#91baff", "#a0c4ff"];
 
   return (
     <motion.div 
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      className="bg-white rounded-xl shadow-lg overflow-hidden"
+      className="bg-white rounded-xl shadow-lg overflow-hidden border border-[#e6f0ff]"
     >
-      <div className="bg-gradient-to-r from-[#1e2c4a] to-[#2d3c74] p-5 text-white">
-        <div className="flex justify-between items-center">
-          <h3 className="text-xl font-bold flex items-center gap-3">
-            <FaChartBar /> Dashboard de Embeddings
-          </h3>
-          <div className="flex gap-3">
-            <button
+      {/* Encabezado con gradiente */}
+      <div className="bg-gradient-to-r from-[#1e2c4a] to-[#3b2f5e] p-5 text-white">
+        <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-4">
+          <div>
+            <h3 className="text-xl font-bold flex items-center gap-3">
+              <FaChartBar /> Dashboard de Análisis
+            </h3>
+            <p className="text-sm opacity-80 mt-1">Visualización de datos del modelo facial</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <motion.button
+              whileHover={{ y: -2 }}
               onClick={() => downloadCSV(neighborsCSV, "vecinos.csv")}
-              className="flex items-center gap-2 px-3 py-1 bg-white/10 rounded hover:bg-white/20 transition-colors text-sm"
+              className="flex items-center gap-2 px-3 py-1 bg-white/10 rounded hover:bg-white/20 transition-colors text-sm border border-white/20"
             >
-              <FaDownload /> Vecinos
-            </button>
-            <button
+              <FaDownload size={14} /> Exportar Vecinos
+            </motion.button>
+            <motion.button
+              whileHover={{ y: -2 }}
               onClick={() => downloadCSV(tsneCSV, "tsne_coords.csv")}
-              className="flex items-center gap-2 px-3 py-1 bg-white/10 rounded hover:bg-white/20 transition-colors text-sm"
+              className="flex items-center gap-2 px-3 py-1 bg-white/10 rounded hover:bg-white/20 transition-colors text-sm border border-white/20"
             >
-              <FaDownload /> t-SNE
-            </button>
+              <FaDownload size={14} /> Exportar Coordenadas
+            </motion.button>
           </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-5 border-b">
+      {/* Tarjetas de métricas */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-5 border-b border-[#e6f0ff]">
         <MetricCard 
-          icon={<FaUsers className="text-blue-500" />}
-          label="Personas"
+          icon={<FaUsers className="text-[#3b2f5e]" size={18} />}
+          label="Personas analizadas"
           value={data.stats.personas}
-          color="blue"
+          color="primary"
         />
         <MetricCard
-          icon={<FaExclamationTriangle className="text-yellow-500" />}
-          label="Rechazados"
+          icon={<FaExclamationTriangle className="text-yellow-500" size={18} />}
+          label="Imágenes rechazadas"
           value={data.stats.rechazados}
-          color="yellow"
+          color="warning"
         />
         <MetricCard
-          icon={<FaCogs className="text-purple-500" />}
-          label="Dimensión"
+          icon={<FaCogs className="text-[#1e2c4a]" size={18} />}
+          label="Dimensión del modelo"
           value={data.stats.dimension}
-          color="purple"
+          color="primary-dark"
         />
         <MetricCard
-          icon={<FaDatabase className="text-green-500" />}
-          label="Clústers"
+          icon={<FaDatabase className="text-[#7fb3ff]" size={18} />}
+          label="Grupos identificados"
           value={data.stats.clusters}
-          color="green"
+          color="accent"
         />
       </div>
 
+      {/* Contenido del dashboard */}
       <div className="p-5">
+        {/* Visualización t-SNE */}
         <div className="mb-8">
-          <h4 className="text-lg font-semibold mb-3 text-gray-800">Visualización t-SNE</h4>
-          <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+          <div className="flex justify-between items-center mb-4">
+            <h4 className="text-lg font-semibold text-[#1e2c4a]">Mapa de Características</h4>
+            <span className="text-sm text-[#3b2f5e] opacity-70">Visualización t-SNE 2D</span>
+          </div>
+          
+          <div className="bg-[#f8faff] rounded-lg p-4 border border-[#e6f0ff] shadow-sm">
+            <div className="mb-3 flex flex-wrap gap-2">
+              {clusterColors.map((color, i) => (
+                <div key={i} className="flex items-center text-xs">
+                  <div 
+                    className="w-3 h-3 rounded-full mr-1" 
+                    style={{ backgroundColor: color }}
+                  ></div>
+                  <span className="text-[#3b2f5e] opacity-80">Grupo {i+1}</span>
+                </div>
+              ))}
+            </div>
+            
             <Plot
               data={[{
                 x: data.tsne.map(p => p.x),
@@ -456,11 +551,16 @@ function EmbeddingsDashboard({ data }) {
                 type: "scatter",
                 marker: {
                   color: data.tsne.map(p => clusterColors[p.cluster % clusterColors.length]),
-                  size: 12,
-                  line: { width: 0.5, color: 'white' }
+                  size: 14,
+                  line: { width: 1, color: 'white' },
+                  opacity: 0.8
                 },
                 hoverinfo: "text",
-                hoverlabel: { bgcolor: "white", font: { color: "black" } }
+                hoverlabel: { 
+                  bgcolor: "white", 
+                  font: { color: "black", size: 12 },
+                  bordercolor: "#e6f0ff"
+                }
               }]}
               layout={{
                 height: 500,
@@ -471,41 +571,68 @@ function EmbeddingsDashboard({ data }) {
                 plot_bgcolor: "transparent",
                 hovermode: "closest"
               }}
-              config={{ displayModeBar: false }}
+              config={{ 
+                displayModeBar: true,
+                displaylogo: false,
+                modeBarButtonsToRemove: ['toImage', 'sendDataToCloud'],
+                modeBarButtonsToAdd: [{
+                  name: 'Descargar SVG',
+                  icon: Plotly.Icons.camera,
+                  click: (gd) => {
+                    Plotly.downloadImage(gd, {
+                      format: 'svg',
+                      width: 800,
+                      height: 600,
+                      filename: 'tsne_visualization'
+                    });
+                  }
+                }]
+              }}
               style={{ width: "100%" }}
             />
           </div>
+          
+          <p className="text-xs text-[#3b2f5e] opacity-70 mt-2 text-center">
+            Cada punto representa una persona. Los puntos cercanos tienen características faciales similares.
+          </p>
         </div>
 
+        {/* Tabla de vecinos más cercanos */}
         <div>
-          <h4 className="text-lg font-semibold mb-3 text-gray-800">Vecinos más cercanos</h4>
-          <div className="overflow-hidden rounded-lg border border-gray-200 shadow-sm">
+          <div className="flex justify-between items-center mb-4">
+            <h4 className="text-lg font-semibold text-[#1e2c4a]">Similitudes Faciales</h4>
+            <span className="text-sm text-[#3b2f5e] opacity-70">Personas más parecidas</span>
+          </div>
+          
+          <div className="overflow-hidden rounded-lg border border-[#e6f0ff] shadow-sm">
             <div className="overflow-x-auto max-h-96">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
+              <table className="min-w-full divide-y divide-[#e6f0ff]">
+                <thead className="bg-[#f8faff]">
                   <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-4 py-3 text-left text-xs font-medium text-[#3b2f5e] uppercase tracking-wider">
                       Persona
                     </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Vecino
+                    <th className="px-4 py-3 text-left text-xs font-medium text-[#3b2f5e] uppercase tracking-wider">
+                      Persona Similar
                     </th>
-                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Similitud
+                    <th className="px-4 py-3 text-right text-xs font-medium text-[#3b2f5e] uppercase tracking-wider">
+                      Nivel de Similitud
                     </th>
                   </tr>
                 </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
+                <tbody className="bg-white divide-y divide-[#e6f0ff]">
                   {data.vecinos.map((v, i) => (
-                    <tr key={i} className="hover:bg-gray-50">
-                      <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
+                    <tr key={i} className="hover:bg-[#f8faff] transition-colors">
+                      <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-[#1e2c4a]">
                         {v.persona}
                       </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-[#3b2f5e]">
                         {v.vecino}
                       </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-500">
-                        {v.similitud.toFixed(4)}
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-right">
+                        <span className="inline-block px-2 py-1 rounded-full text-xs font-medium bg-[#f0f6ff] text-[#1e2c4a]">
+                          {v.similitud.toFixed(4)}
+                        </span>
                       </td>
                     </tr>
                   ))}
@@ -513,6 +640,10 @@ function EmbeddingsDashboard({ data }) {
               </table>
             </div>
           </div>
+          
+          <p className="text-xs text-[#3b2f5e] opacity-70 mt-2">
+            Muestra las personas que el modelo considera más similares entre sí (valores cercanos a 1 indican mayor similitud).
+          </p>
         </div>
       </div>
     </motion.div>
@@ -521,21 +652,24 @@ function EmbeddingsDashboard({ data }) {
 
 function MetricCard({ icon, label, value, color }) {
   const colorMap = {
-    blue: "text-blue-600 bg-blue-50",
-    green: "text-green-600 bg-green-50",
-    yellow: "text-yellow-600 bg-yellow-50",
-    purple: "text-purple-600 bg-purple-50"
+    "primary": "bg-[#f0f6ff] text-[#1e2c4a]",
+    "primary-dark": "bg-[#e6f0ff] text-[#1e2c4a]",
+    "accent": "bg-[#e6f0ff] text-[#3b2f5e]",
+    "warning": "bg-yellow-50 text-yellow-700"
   };
 
   return (
-    <div className={`p-3 rounded-lg flex items-center gap-3 ${colorMap[color]}`}>
-      <div className="p-2 rounded-md bg-white shadow-sm">
+    <motion.div 
+      whileHover={{ y: -2 }}
+      className={`p-3 rounded-lg flex items-center gap-3 ${colorMap[color]} border border-[#e6f0ff] shadow-sm`}
+    >
+      <div className="p-2 rounded-md bg-white shadow-sm flex items-center justify-center">
         {icon}
       </div>
       <div>
         <div className="text-xl font-bold">{value}</div>
         <div className="text-xs font-medium opacity-80">{label}</div>
       </div>
-    </div>
+    </motion.div>
   );
 }

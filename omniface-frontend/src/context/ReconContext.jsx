@@ -3,20 +3,25 @@ import {
   useState, useEffect, useCallback
 } from "react";
 
-/* ---------- host backend WS ---------- */
+/* --- host backend --- */
 const BACKEND_HOST =
   import.meta.env.VITE_BACKEND_WS ??
   `${window.location.hostname}:8000`;
-/* ------------------------------------- */
+/* -------------------- */
 
-const ReconCtx = createContext(null);
+/* 1 Context por cámara → se almacena en este mapa */
+const CtxMap = {};
+function getCtx(id) {
+  return (CtxMap[id] ??= createContext(null));
+}
 
-/* ───────────────────────────────────── */
-export function ReconProvider({ children }) {
+/* ────────────────────────────── */
+export function ReconProvider({ camId = 0, modo = "normal", children }) {
+  const ReconCtx = getCtx(camId);
   const ws = useRef(null);
 
   /* estado base */
-  const nuevoEstado = () => ({
+  const blank = () => ({
     connected   : false,
     paused      : false,
     fps         : 0,
@@ -27,104 +32,85 @@ export function ReconProvider({ children }) {
     latencyHist : [],
     error       : null
   });
-  const [data, setData] = useState(nuevoEstado);
+  const [data, setData] = useState(blank);
 
-  /* ----------------------------------- */
-  /* abrir conexión                      */
-  /* ----------------------------------- */
-  const connect = useCallback((camId = 0) => {
+  /* abrir WS */
+  const connect = useCallback(() => {
     if (ws.current?.readyState === WebSocket.OPEN) return;
 
-    const raw = localStorage.getItem("access_token") ?? "";
+    const raw   = localStorage.getItem("access_token") ?? "";
     const token = raw.replace(/^Bearer\s+/i, "");
     if (!token) {
-      setData(d => ({ ...d, error: "Token no encontrado" }));
+      setData(d => ({ ...d, error:"Token no encontrado" }));
       return;
     }
 
-    localStorage.setItem("omniface_cam", camId);
-
     const proto = window.location.protocol === "https:" ? "wss" : "ws";
-    const url   = `${proto}://${BACKEND_HOST}/recon/ws` +
-                  `?cam_id=${camId}&token=${token}`;
+    const url   = `${proto}://${BACKEND_HOST}/recon/ws?cam_id=${camId}&token=${token}&modo=${modo}`;
+    ws.current  = new WebSocket(url);
 
-    ws.current = new WebSocket(url);
+    ws.current.onopen  = () => setData(d=>({...d,connected:true,paused:false,error:null}));
+    ws.current.onclose = (event) => {
+  console.log(`[WS] Cerrado: code=${event.code}, reason=${event.reason}`);
+  setData(d => ({ ...d, connected: false }));
+};
+   ws.current.onerror = (event) => {
+  console.error("[WS] Error:", event);
+  setData(d => ({ ...d, error: "No se pudo conectar. Revisa consola del servidor." }));
+};
 
-    ws.current.onopen = () =>
-      setData(d => ({ ...d, connected:true, paused:false, error:null }));
-
-    ws.current.onclose = () =>
-      setData(d => ({ ...d, connected:false }));
-
-    ws.current.onerror = () =>
-      setData(d => ({ ...d, error:"No se pudo conectar al servidor" }));
-
-    /* throttle para no forzar re-renders constantes
-       solo actualizamos React cada 60 ms aprox (≈16 fps) */
-    let ultimoEmit = 0;
-
+    /* throttle 60 ms ≈ 16 fps */
+    let lastEmit = 0;
     ws.current.onmessage = ev => {
       const msg = JSON.parse(ev.data);
-
       if (msg.type === "error") {
-        setData(d => ({ ...d, error:msg.detail }));
+        setData(d => ({ ...d, error: msg.detail }));
         return;
       }
       if (msg.type !== "frame") return;
 
-      const ahora = performance.now();
-      if (ahora - ultimoEmit < 60) return;   // throttle
-      ultimoEmit = ahora;
+      const now     = performance.now();
+      if (now - lastEmit < 60) return;
+      lastEmit = now;
 
-      const latency = Date.now() - msg.timestamp * 1000;
+      const latency = Date.now() - msg.timestamp*1000;
 
-      setData(d => {
-        const lastFrame = d.paused ? d.lastFrame : msg.frame;
-        return {
-          ...d,
-          lastFrame,
-          faces       : msg.faces,
-          fps         : msg.fps,
-          latency,
-          fpsHist     : [...d.fpsHist.slice(-59), msg.fps],
-          latencyHist : [...d.latencyHist.slice(-59), latency]
-        };
-      });
+      setData(d => ({
+        ...d,
+        lastFrame   : d.paused ? d.lastFrame : msg.frame,
+        faces       : msg.faces,
+        fps         : msg.fps,
+        latency,
+        fpsHist     : [...d.fpsHist.slice(-59), msg.fps],
+        latencyHist : [...d.latencyHist.slice(-59), latency]
+      }));
     };
-  }, []);
+  }, [camId, modo]);
 
-  /* ----------------------------------- */
-  /* pausar / reanudar / detener         */
-  /* ----------------------------------- */
+  /* controles */
   const pause  = () => setData(d => ({ ...d, paused:true  }));
   const resume = () => setData(d => ({ ...d, paused:false }));
-  const stop   = useCallback(() => {
-    localStorage.removeItem("omniface_cam");
-    ws.current?.close();
+  const stop = useCallback(() => {
+  if (ws.current) {
+    ws.current.close(1000, "Stopped by user");  // Cierra con código normal
     ws.current = null;
-    setData(nuevoEstado());
-  }, []);
+  }
+  setData(blank());  // Resetea estado inmediatamente
+}, []);
 
-  /* cerrar al descargar la pestaña */
-  useEffect(() => () => ws.current?.close(), []);
-
-  /* autoreconectar tras refresh */
-  useEffect(() => {
-    const cam = localStorage.getItem("omniface_cam");
-    if (cam) connect(Number(cam));
-  }, [connect]);
+  /* cerrar al salir */
+  useEffect(()=> () => ws.current?.close(), []);
 
   return (
-    <ReconCtx.Provider
-      value={{ data, connect, pause, resume, stop }}
-    >
+    <ReconCtx.Provider value={{ data, connect, pause, resume, stop }}>
       {children}
     </ReconCtx.Provider>
   );
 }
 
-export function useRecon() {
-  const ctx = useContext(ReconCtx);
+/* hook de consumo */
+export function useRecon(camId = 0) {
+  const ctx = useContext( getCtx(camId) );
   if (!ctx) throw new Error("useRecon debe usarse dentro de ReconProvider");
   return ctx;
 }

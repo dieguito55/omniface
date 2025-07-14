@@ -1,10 +1,4 @@
-# omniface-backend/recon_live.py
-"""
-Endpoints para reconocimiento facial en vivo:
-
-•  GET /recon/camaras        → lista las cámaras disponibles
-•  WS  /recon/ws?cam_id=0&token=…  → stream de vídeo + datos
-"""
+import mysql.connector
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query
 import cv2, json, asyncio
@@ -14,6 +8,8 @@ from config          import SECRET_KEY, ALGORITHM
 from jose            import jwt, JWTError
 import time
 import os
+from fastapi import HTTPException
+
 _cam_cache = {"camaras": [], "ts": 0}
 
 router = APIRouter(prefix="/recon", tags=["Reconocimiento en vivo"])
@@ -32,8 +28,10 @@ def get_user_id_from_token(token: str) -> int:
 #  Listar cámaras locales
 # ──────────────────────────────
 @router.get("/camaras")
-def listar_camaras():
-    if time.time() - _cam_cache["ts"] < 30:          # ← 30 s
+def listar_camaras(force: bool = False):
+    if force or time.time() - _cam_cache["ts"] < 30:          # ← 30 s o force
+        _cam_cache["ts"] = 0  # Force reload
+    if time.time() - _cam_cache["ts"] < 30:
         return {"camaras": _cam_cache["camaras"]}
 
     cams = []
@@ -47,13 +45,27 @@ def listar_camaras():
     return {"camaras": cams}
 
 # ──────────────────────────────
+#  Recargar modelo
+# ──────────────────────────────
+@router.get("/reload_model")
+def reload_model(token: str = Query(...)):
+    try:
+        user_id = get_user_id_from_token(token)
+        RecognitionSession.reload_model(user_id)
+        return {"mensaje": "Modelo recargado"}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+# ──────────────────────────────
 #  WebSocket principal
 # ──────────────────────────────
 @router.websocket("/ws")
 async def websocket_recon(
-        ws: WebSocket,
-        cam_id: int = 0,
-        token: str = Query(...)):           # token obligatorio en la URL
+    ws: WebSocket,
+    cam_id: int = 0,
+    token: str = Query(...),
+    modo: str = Query("normal")
+):
     # ── autenticar ───────────────────────
     try:
         user_id = get_user_id_from_token(token)
@@ -65,8 +77,8 @@ async def websocket_recon(
 
     # ── crear sesión ─────────────────────
     try:
-        session = RecognitionSession(user_id, cam_id)
-    except FileNotFoundError as e:
+        session = RecognitionSession(user_id, cam_id, modo)
+    except Exception as e:  # Cambiado de FileNotFoundError a Exception para atrapar todo
         await ws.send_text(json.dumps(
             {"type": "error", "detail": str(e)}
         ))
@@ -78,7 +90,45 @@ async def websocket_recon(
     try:
         await session.stream(ws)
     except WebSocketDisconnect:
-        
         pass
     finally:
         await session.close()
+# ──────────────────────────────
+#  Endpoint para salidas del día
+# ──────────────────────────────
+@router.get("/salida/dia/{usuario_id}")
+def salidas_dia(usuario_id: int):
+    try:
+        conn = mysql.connector.connect(host="localhost", user="root", password="", database="omniface")
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("""
+            SELECT s.nombre, s.foto_path, s.fecha, s.hora, d.nombre AS departamento
+            FROM salidas s
+            LEFT JOIN departamentos d ON s.departamento_id = d.id
+            WHERE s.usuario_id = %s AND s.fecha = CURDATE()
+            ORDER BY s.hora DESC
+        """, (usuario_id,))
+        resultados = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        return resultados
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+@router.get("/estados")
+def get_estados(token: str = Query(...)):
+  try:
+    user_id = get_user_id_from_token(token)
+    conn = mysql.connector.connect(host="localhost", user="root", password="", database="omniface")
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("""
+      SELECT p.nombre_completo as nombre, e.emocion_actual as emocion, e.ubicacion_actual as ubicacion
+      FROM estado_persona e
+      LEFT JOIN personas p ON e.persona_id = p.id
+      WHERE p.usuario_id = %s
+    """, (user_id,))
+    estados = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    return estados
+  except Exception as e:
+    raise HTTPException(status_code=500, detail=str(e))

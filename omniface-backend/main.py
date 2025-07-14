@@ -18,7 +18,7 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:5173",
         "http://127.0.0.1:5173",
-        "http://192.168.31.146:5173",  # tu frontend en red local
+        "http://192.168.100.42:5173",  # tu frontend en red local
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -37,3 +37,4 @@ app.include_router(asistencia_router)
 app.mount("/imagenes_originales", StaticFiles(directory="imagenes_originales"), name="imagenes_originales")
 app.mount("/imagenes_optimizadas", StaticFiles(directory="imagenes_optimizadas"), name="imagenes_optimizadas")
 app.mount("/capturas", StaticFiles(directory="capturas"), name="capturas")
+app.mount("/capturas_salidas", StaticFiles(directory="capturas_salidas"), name="capturas_salidas")

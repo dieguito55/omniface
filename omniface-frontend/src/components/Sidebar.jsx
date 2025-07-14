@@ -1,7 +1,9 @@
 // omniface-frontend/src/components/Sidebar.jsx
 import {
   FaHome, FaUserFriends, FaClock, FaCamera,
-  FaHistory, FaCog, FaBell, FaServer, FaChevronRight
+  FaHistory, FaCog, FaBell, FaServer, FaChevronRight,
+  FaChartBar,  // Nuevo para dashboard
+  FaChevronDown  // Nuevo para expand
 } from "react-icons/fa";
 import { FiLogOut } from "react-icons/fi";
 import { HiOutlineChip } from "react-icons/hi";
@@ -16,6 +18,15 @@ const opciones = [
   { label: "Generar Modelo", icon: <FaClock />, key: "GenerarModelo" },
   { label: "Reconocimiento Facial", icon: <FaCamera />, key: "ReconocimientoFacial" },
   { label: "Historial", icon: <FaHistory />, key: "HistorialAsistencia" },
+  { 
+    label: "Dashboard Estadístico", 
+    icon: <FaChartBar />, 
+    key: "DashboardEstadistico",
+    subOpciones: [  // Sub-menú
+      { label: "Emociones en Vivo", key: "EmocionesVivo" },
+      { label: "Localización en Vivo", key: "LocationVivo" },
+    ]
+  },
   { label: "Configuración", icon: <FaCog />, key: "Configuracion" },
   { label: "Notificaciones", icon: <FaBell />, key: "Notificacion", notifica: true },
 ];
@@ -46,7 +57,7 @@ const ServerStatusIndicator = ({ status, colapsado }) => (
   </motion.div>
 );
 
-const NavItem = ({ item, isActive, colapsado, notificaciones, onClick, hoveredItem, setHoveredItem }) => (
+const NavItem = ({ item, isActive, colapsado, notificaciones, onClick, hoveredItem, setHoveredItem, isSub = false }) => (
   <motion.div
     whileHover={{ scale: 1.03 }}
     whileTap={{ scale: 0.97 }}
@@ -55,6 +66,7 @@ const NavItem = ({ item, isActive, colapsado, notificaciones, onClick, hoveredIt
     className={`relative flex items-center ${colapsado ? "justify-center" : "justify-start"} 
       ${isActive ? "bg-white/10" : "hover:bg-white/5"} 
       rounded-xl mx-1 p-3 cursor-pointer transition-all duration-200
+      ${isSub ? "pl-6 text-sm" : ""}  // Indent para sub
       ${isActive ? "border-l-4 border-[#7fb3ff]" : ""}`}
     onClick={onClick}
     data-tooltip-id="sidebar-tooltip"
@@ -131,13 +143,14 @@ const NavItem = ({ item, isActive, colapsado, notificaciones, onClick, hoveredIt
   </motion.div>
 );
 
-export default function Sidebar({ vistaActual, cambiarVista, colapsado }) {
+export default function Sidebar({ vistaActual, cambiarVista, cerrarSesion, colapsado }) {
   const [usuario, setUsuario] = useState({ nombre: "...", imagen: "default.png" });
   const [estadoServidor, setEstadoServidor] = useState("online");
   const [textoAnimado, setTextoAnimado] = useState("");
   const [notificaciones, setNotificaciones] = useState(0);
   const [hoveredItem, setHoveredItem] = useState(null);
   const [isHovered, setIsHovered] = useState(false);
+  const [expandedKeys, setExpandedKeys] = useState([]);  // Para toggle sub-menús
 
   useEffect(() => {
     const obtenerNotificaciones = async () => {
@@ -169,35 +182,41 @@ export default function Sidebar({ vistaActual, cambiarVista, colapsado }) {
     obtenerPerfil();
   }, []);
 
- useEffect(() => {
-  let i = 0;
-  let mostrando = true;
-  const texto = usuario.nombre;
-  
-  const intervalo = setInterval(() => {
-    setTextoAnimado(prev => {
-      if (mostrando) {
-        const siguiente = texto.slice(0, i + 1);
-        i++;
-        if (i > texto.length) {
-          mostrando = false;
-          i = texto.length - 1;
+  useEffect(() => {
+    let i = 0;
+    let mostrando = true;
+    const texto = usuario.nombre;
+    
+    const intervalo = setInterval(() => {
+      setTextoAnimado(prev => {
+        if (mostrando) {
+          const siguiente = texto.slice(0, i + 1);
+          i++;
+          if (i > texto.length) {
+            mostrando = false;
+            i = texto.length - 1;
+          }
+          return siguiente;
+        } else {
+          const siguiente = texto.slice(0, i);
+          i--;
+          if (i < 0) {
+            mostrando = true;
+            i = 0;
+          }
+          return siguiente;
         }
-        return siguiente;
-      } else {
-        const siguiente = texto.slice(0, i);
-        i--;
-        if (i < 0) {
-          mostrando = true;
-          i = 0;
-        }
-        return siguiente;
-      }
-    });
-  }, 340);
+      });
+    }, 340);
 
-  return () => clearInterval(intervalo);
-}, [usuario.nombre]);
+    return () => clearInterval(intervalo);
+  }, [usuario.nombre]);
+
+  const toggleExpand = (key) => {
+    setExpandedKeys(prev => 
+      prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]
+    );
+  };
 
   return (
     <motion.aside
@@ -285,19 +304,50 @@ export default function Sidebar({ vistaActual, cambiarVista, colapsado }) {
           )}
         </motion.div>
 
-        {/* NAV */}
+        {/* NAV con sub-menú */}
         <nav className="space-y-1 mt-2">
           {opciones.map((item) => (
-            <NavItem
-              key={item.key}
-              item={item}
-              isActive={vistaActual === item.key}
-              colapsado={colapsado}
-              notificaciones={notificaciones}
-              onClick={() => cambiarVista(item.key)}
-              hoveredItem={hoveredItem}
-              setHoveredItem={setHoveredItem}
-            />
+            <div key={item.key}>
+              <NavItem
+                item={item}
+                isActive={vistaActual === item.key}
+                colapsado={colapsado}
+                notificaciones={notificaciones}
+                onClick={() => {
+                  if (item.subOpciones) {
+                    toggleExpand(item.key);  // Toggle expand
+                  } else {
+                    cambiarVista(item.key);
+                  }
+                }}
+                hoveredItem={hoveredItem}
+                setHoveredItem={setHoveredItem}
+              />
+              <AnimatePresence>
+                {expandedKeys.includes(item.key) && item.subOpciones && !colapsado && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: "auto", opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    transition={{ duration: 0.3 }}
+                    className="ml-4 space-y-1"
+                  >
+                    {item.subOpciones.map(sub => (
+                      <NavItem
+                        key={sub.key}
+                        item={sub}
+                        isActive={vistaActual === sub.key}
+                        colapsado={colapsado}
+                        onClick={() => cambiarVista(sub.key)}
+                        hoveredItem={hoveredItem}
+                        setHoveredItem={setHoveredItem}
+                        isSub={true}
+                      />
+                    ))}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
           ))}
         </nav>
       </div>
@@ -310,7 +360,7 @@ export default function Sidebar({ vistaActual, cambiarVista, colapsado }) {
           whileHover={{ scale: 1.02 }}
           whileTap={{ scale: 0.98 }}
           className={`flex items-center ${colapsado ? "justify-center" : "justify-start px-3"} py-3 rounded-xl hover:bg-white/5 cursor-pointer`}
-          onClick={() => console.log("Cerrar sesión")}
+          onClick={cerrarSesion}
         >
           <FiLogOut className="text-lg text-red-300/80" />
           {!colapsado && (

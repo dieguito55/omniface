@@ -1,42 +1,114 @@
-
-# omniface-backend/recognition_core.py
-"""
-Motor de reconocimiento en vivo.
-
-•  Carga los modelos InsightFace únicamente la PRIMERA vez que alguien inicia
-   un WebSocket (lazy-load).
-•  Mantiene en caché los índices FAISS de cada usuario.
-•  Captura la cámara en un hilo aparte para no bloquear el event-loop.
-•  Envía los frames como JPEG base64 + metadatos (rostros, FPS, timestamp).
-"""
-
 import os
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"       # evita warning de MKL
 os.environ["OMP_NUM_THREADS"]      = "1"          # ↓ evita desbordar hilos
 os.environ["CUDA_MODULE_LOADING"]  = "LAZY"
 
-import cv2, faiss, pickle, time, base64, asyncio, queue
+import cv2, faiss, pickle, time, base64, asyncio, queue 
 import numpy as np
 from pathlib import Path
 from threading import Thread
 from typing import List, Tuple
 from insightface.app import FaceAnalysis
 import functools
-from datetime import datetime, time
+from datetime import datetime, time as dtime 
 from collections import defaultdict
 import uuid
 import mysql.connector
-import time  # <--- para time.time()
-from datetime import datetime, time as dtime  # <--- renombrar para evitar conflicto
 import mediapipe as mp
 mp_face_mesh = mp.solutions.face_mesh
 mp_drawing = mp.solutions.drawing_utils
 mp_drawing_styles = mp.solutions.drawing_styles
-# arrastra junto a las demás importaciones
 import torch
 torch.backends.cudnn.benchmark = True
 torch.set_num_threads(1)
 torch.cuda.set_per_process_memory_fraction(0.8)
+from tensorflow.keras.models import load_model  # Para cargar el .h5
+TH_SIMILARITY = 0.55
+
+# ────────────────────────────────────────────────
+#  Worker global de inferencia     (Paso 2)
+# ────────────────────────────────────────────────
+class InferenceWorker(Thread):
+    """
+    Recibe (frame, future) de varias RecognitionSession,
+    procesa por lotes en GPU y resuelve los futures.
+    """
+    def __init__(self, face_app, face_mesh, index, nombres,emotion_model):
+        super().__init__(daemon=True)
+        self.face_app  = face_app
+        self.face_mesh = face_mesh 
+        self.index     = index
+        self.nombres   = nombres
+        self.emotion_model = emotion_model
+        self.q_in = queue.Queue()   # (frame, future)
+        self.start()
+
+    # Sesión llama → devuelve asyncio.Future
+    def submit(self, frame):
+        fut = asyncio.get_running_loop().create_future()
+        self.q_in.put((frame, fut))
+        return fut
+
+    # Bucle permanente
+    def run(self):
+        while True:
+            frames, futs = [], []
+            try:
+                fr, fu = self.q_in.get(timeout=0.05)
+                frames.append(fr); futs.append(fu)
+                while not self.q_in.empty():
+                    fr, fu = self.q_in.get_nowait()
+                    frames.append(fr); futs.append(fu)
+            except queue.Empty:
+                continue
+
+            # ---------- INFERENCIA LOTE ----------
+            batch_results = [self._infer_single(f) for f in frames]
+
+            # ---------- Resolver futures ----------
+            for fu, res in zip(futs, batch_results):
+                if not fu.cancelled():
+                    fu.set_result(res)
+
+    # Copia aquí tu antigua lógica de RecognitionSession._infer
+    def _infer_single(self, frame):
+        rostros = self.face_app.get(frame)
+        print(f"[DEBUG] Rostros detectados por InsightFace: {len(rostros)}")  # Log para depuración
+        if not rostros:
+            return []
+        embeds = np.array([r.embedding for r in rostros], np.float32)
+        faiss.normalize_L2(embeds)
+        D, I = self.index.search(embeds, 1)
+        faces = []
+        for r, d, i in zip(rostros, D.ravel(), I.ravel()):
+            sim = float(d)
+            name = self.nombres[i] if sim >= TH_SIMILARITY else "Desconocido"
+            x1, y1, x2, y2 = map(int, r.bbox)
+            emocion = "N/A"
+            if self.emotion_model is not None:
+                try:
+                    face_region = frame[y1:y2, x1:x2]
+                    if face_region.size > 0:
+                        gray = cv2.cvtColor(face_region, cv2.COLOR_BGR2GRAY)
+                        gray = cv2.convertScaleAbs(gray, alpha=1.2, beta=10)
+                        resized = cv2.resize(gray, (48, 48))
+                        resized = resized.astype('float32') / 255.0
+                        input_array = np.expand_dims(np.expand_dims(resized, axis=-1), axis=0)
+                        pred = self.emotion_model.predict(input_array, verbose=0)[0]
+                        emociones = ['Angry', 'Disgust', 'Fear', 'Happy', 'Neutral', 'Sad', 'Surprise']
+                        emocion = emociones[np.argmax(pred)]
+                        probs_str = ', '.join(f'{emociones[i]}: {float(pred[i]):.4f}' for i in range(len(emociones)))
+                        print(f"[DEBUG] Emoción probs para {name}: {{ {probs_str} }}")
+                except Exception as e:
+                    print(f"[ERROR] Fallo en detección de emoción para {name}: {e}")
+            faces.append({
+                "bbox": (x1, y1, x2, y2),
+                "nombre": name,
+                "emocion": emocion,
+                "r": r
+            })
+        return faces
+
 def dibujar_esquinas(frame, x1, y1, x2, y2, color, grosor=2, largo=30, radio=8):
     esquinas = [
         ((x1, y1), (x1 + largo, y1), (x1, y1 + largo)),
@@ -112,6 +184,7 @@ def dibujar_landmarks(frame, bbox, face_mesh):
     
     # Convertir de vuelta a BGR y copiar al frame original
     face_region[:] = cv2.cvtColor(rgb_face, cv2.COLOR_RGB2BGR)
+
 def es_rostro_valido(r, frame):
     """Valida la calidad del rostro detectado"""
     try:
@@ -149,6 +222,36 @@ def es_rostro_valido(r, frame):
         return False
 
 
+# ────────────────────────────────────────────────
+#  Gestor global de cámaras        (Paso 1)
+# ────────────────────────────────────────────────
+class VideoManager:
+    """
+    Devuelve un VideoCaptureThread por cam_id.
+    Lleva un conteo de cuántas sesiones la usan
+    y cierra la cámara cuando nadie la necesita.
+    """
+    _threads: dict[int, "VideoCaptureThread"] = {}
+    _refcnt : dict[int, int] = {}
+
+    @classmethod
+    def get(cls, cam_id: int) -> "VideoCaptureThread":
+        if cam_id not in cls._threads or not cls._threads[cam_id].running:
+            cls._threads[cam_id] = VideoCaptureThread(cam_id)
+            cls._refcnt[cam_id]  = 0
+        cls._refcnt[cam_id] += 1
+        return cls._threads[cam_id]
+
+    @classmethod
+    def release(cls, cam_id: int):
+        if cam_id not in cls._threads:
+            return
+        cls._refcnt[cam_id] -= 1
+        if cls._refcnt[cam_id] <= 0:
+            cls._threads[cam_id].stop()
+            del cls._threads[cam_id]
+            del cls._refcnt[cam_id]
+
 # ──────────────────────────────
 #  Captura de vídeo (hilo)
 # ──────────────────────────────
@@ -156,13 +259,13 @@ class VideoCaptureThread:
     """
     Captura frames en segundo plano y mantiene sólo el más reciente.
     """
-    def __init__(self, cam_id: int, width=1280, height=720):
+    def __init__(self, cam_id: int, width=960, height=540):
         # En Windows MSMF suele dar menos problemas que DSHOW
         backend = cv2.CAP_MSMF if os.name == "nt" else 0
         self.cap = cv2.VideoCapture(cam_id, backend)
         self.cap.set(cv2.CAP_PROP_FRAME_WIDTH,  width)
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
-        self.cap.set(cv2.CAP_PROP_FPS,          30)
+        self.cap.set(cv2.CAP_PROP_FPS,          20)
 
         self.q        = queue.Queue(maxsize=1)
         self.running  = True
@@ -240,11 +343,106 @@ class RecognitionSession:
             conn.close()
         except Exception as e:
             print(f"[ERROR] Registro de asistencia falló: {e}")
+    def _registrar_salida(self, persona_nombre, path_foto, fecha, hora):
+        try:
+            conn = mysql.connector.connect(
+                host="localhost",
+                user="root",
+                password="",
+                database="omniface"
+            )
+            cursor = conn.cursor()
+
+            # Buscar persona
+            cursor.execute("SELECT id, usuario_id, departamentos_id FROM personas WHERE nombre_completo=%s", (persona_nombre,))
+            persona = cursor.fetchone()
+
+            if persona:
+                persona_id, usuario_id, dep_id = persona
+            else:
+                persona_id = None
+                usuario_id = self.user_id
+                dep_id = None
+
+            cursor.execute("""
+                INSERT INTO salidas
+                (persona_id, usuario_id, departamento_id, nombre, foto_path, fecha, hora)
+                VALUES (%s,%s,%s,%s,%s,%s,%s)
+            """, (
+                persona_id,
+                usuario_id,
+                dep_id,
+                persona_nombre,
+                path_foto,
+                fecha,
+                hora
+            ))
+
+            conn.commit()
+            cursor.close()
+            conn.close()
+        except Exception as e:
+            print(f"[ERROR] Registro de salida falló: {e}")
+
+    async def _actualizar_estado_persona(self, persona_nombre: str, emocion: str, camara_id: str):
+        if persona_nombre == "Desconocido":
+            return  # Ignora desconocidos por ahora
+
+        try:
+            conn = mysql.connector.connect(
+                host="localhost",
+                user="root",
+                password="",
+                database="omniface"
+            )
+            cursor = conn.cursor()
+
+            # Obtener persona_id (para conocidos)
+            cursor.execute("SELECT id FROM personas WHERE nombre_completo = %s AND usuario_id = %s", (persona_nombre, self.user_id))
+            persona = cursor.fetchone()
+            if not persona:
+                return  # No es conocido, ignora
+
+            persona_id = persona[0]
+            ubicacion = f"camara_{camara_id}"  # Formato con guión bajo y minúscula
+
+            # UPSERT: Insert si no existe, update si sí (fluido, una query)
+            cursor.execute("""
+                INSERT INTO estado_persona (persona_id, emocion_actual, ubicacion_actual)
+                VALUES (%s, %s, %s)
+                ON DUPLICATE KEY UPDATE
+                emocion_actual = VALUES(emocion_actual),
+                ubicacion_actual = VALUES(ubicacion_actual)
+            """, (persona_id, emocion, ubicacion))
+
+            conn.commit()
+            print(f"[DEBUG] Estado actualizado para {persona_nombre}: Emoción={emocion}, Ubicación={ubicacion}")  # Log para depurar
+        except mysql.connector.Error as e:
+            print(f"[ERROR] Actualizar estado persona: {e}")
+        finally:
+            cursor.close()
+            conn.close()
+
+
     # --- caches compartidos ---
     _face_app = None                                          # modelo single-ton
     _models   = {}  # {user_id: (index, [nombres])}
     _face_mesh = None  # modelo single-ton para MediaPipe
+    _workers = {}  # {user_id: InferenceWorker}  # Worker per user
+    _emotion_model = None  # Modelo single-ton para emociones
 
+    @classmethod
+    def _get_emotion_model(cls):
+        if cls._emotion_model is None:
+            print("[Recon] ▶ Cargando modelo de emociones (emotion_model.h5)…")
+            try:
+                cls._emotion_model = load_model('emotion_model.h5')
+            except Exception as e:
+                print(f"[ERROR] Fallo al cargar modelo de emociones: {e}")
+                cls._emotion_model = None
+        return cls._emotion_model
+    _ultimo_dia = None
+    _registrados_hoy = defaultdict(set)
     @classmethod
     def _get_face_mesh(cls):
         if cls._face_mesh is None:
@@ -257,8 +455,9 @@ class RecognitionSession:
                 min_tracking_confidence=0.5
             )
         return cls._face_mesh
+    
     # --- parámetros ---
-    _TH_SIMILARITY = 0.55
+
     _JPEG_PARAMS   = [int(cv2.IMWRITE_JPEG_QUALITY), 80]
 
     # ╭─────────────────────────╮
@@ -299,6 +498,12 @@ class RecognitionSession:
         print(f"[Recon] ⚡ Modelo usuario {user_id} cargado ({len(names)} emb.)")
         return index, names
 
+    @classmethod
+    def reload_model(cls, user_id: int):
+        cls._models.pop(user_id, None)  # Limpia cache modelo
+        cls._workers.pop(user_id, None)  # Limpia worker para recrear con nuevo index
+        return cls._load_model(user_id)  # Recarga modelo
+
     # ╭─────────────────────────╮
     # │  Constructor            │
     # ╰─────────────────────────╯
@@ -311,104 +516,122 @@ class RecognitionSession:
         cursor.close()
         conn.close()
         return fotos
-    def __init__(self, user_id: int, cam_id: int):
-        self.user_id  = user_id
-        self.face_app  = self._get_face_app()
+
+    def __init__(self, user_id: int, cam_id: int, modo: str = "normal"):
+        print(f"[DEBUG] Iniciando RecognitionSession para user_id={user_id}, cam_id={cam_id}, modo={modo}")
+        self.user_id = user_id
+        self.cam_id = cam_id
+        hoy = datetime.now().date()
+        if not hasattr(self, '_ultimo_dia') or self._ultimo_dia != hoy:
+            self._registrados_hoy[self.user_id].clear()
+            self._ultimo_dia = hoy
+        self.modo = modo
+
+        # ---- modelo/índice/mesh ----------
+        self.face_app = self._get_face_app()
         self.face_mesh = self._get_face_mesh()
+        print("[DEBUG] Cargando modelo...")
         self.index, self.nombres = self._load_model(user_id)
-        self.fotos = self._load_fotos(user_id)  # Nuevo método
-        self.cam       = VideoCaptureThread(cam_id)
+        print("[DEBUG] Cargando fotos de DB...")
+        self.fotos = self._load_fotos(user_id)
+        self.emotion_model = self._get_emotion_model()
+
+        # ---- caché optimizado: horas por departamento y dep_id por persona ----
+        self.horas_por_departamento = {}
+        self.dep_por_persona = {}
+        print("[DEBUG] Iniciando carga de cachés optimizados...")
+        try:
+            conn = mysql.connector.connect(host="localhost", user="root", password="", database="omniface")
+            print("[DEBUG] Conexión BD exitosa")
+            cursor = conn.cursor(dictionary=True)
+
+            # Caché de horas por departamento
+            cursor.execute("""
+                SELECT id, hora_temprano, hora_tarde
+                FROM departamentos
+                WHERE usuario_id = %s
+            """, (user_id,))
+            rows_dep = cursor.fetchall()
+            print(f"[DEBUG] Encontrados {len(rows_dep)} departamentos")
+            for row in rows_dep:
+                try:
+                    hora_temprano_td = row["hora_temprano"]
+                    hora_tarde_td = row["hora_tarde"]
+                    if hora_temprano_td is None or hora_tarde_td is None:
+                        raise ValueError("Hora nula")
+
+                    # Convertir timedelta a time
+                    hora_temprano = dtime(
+                        hora_temprano_td.seconds // 3600,
+                        (hora_temprano_td.seconds // 60) % 60,
+                        hora_temprano_td.seconds % 60
+                    )
+                    hora_tarde = dtime(
+                        hora_tarde_td.seconds // 3600,
+                        (hora_tarde_td.seconds // 60) % 60,
+                        hora_tarde_td.seconds % 60
+                    )
+
+                    self.horas_por_departamento[row["id"]] = {
+                        "hora_temprano": hora_temprano,
+                        "hora_tarde": hora_tarde
+                    }
+                    print(f"[DEBUG] Horas cargadas para dep {row['id']}: {self.horas_por_departamento[row['id']]}")
+                except Exception as ve:
+                    print(f"[ERROR] Hora inválida para dep {row['id']}, usando defaults: {ve}")
+                    self.horas_por_departamento[row["id"]] = {
+                        "hora_temprano": dtime(8, 10),
+                        "hora_tarde": dtime(14, 30)
+                    }
+
+            # Caché de dep_id por persona (para mapear rápido en stream)
+            cursor.execute("""
+                SELECT nombre_completo, departamentos_id
+                FROM personas
+                WHERE usuario_id = %s
+            """, (user_id,))
+            rows_personas = cursor.fetchall()
+            print(f"[DEBUG] Encontradas {len(rows_personas)} personas")
+            for row in rows_personas:
+                if row["departamentos_id"] is not None:
+                    self.dep_por_persona[row["nombre_completo"]] = row["departamentos_id"]
+                    print(f"[DEBUG] Dep cargado para {row['nombre_completo']}: {row['departamentos_id']}")
+                else:
+                    print(f"[DEBUG] Persona {row['nombre_completo']} sin dep, usará defaults")
+
+        except mysql.connector.Error as e:
+            print(f"[ERROR] Fallo en conexión o query para cachés: {e}")
+        finally:
+            if 'cursor' in locals():
+                cursor.close()
+            if 'conn' in locals():
+                conn.close()
+            print("[DEBUG] Carga de cachés completada")
+
+        # ---- cámara compartida -----------
+        self.cam = VideoManager.get(cam_id)
+
+        # ---- worker per user -----------
+        if self.user_id not in self._workers:
+            self._workers[self.user_id] = InferenceWorker(
+                self.face_app, self.face_mesh, self.index, self.nombres, self.emotion_model
+            )
+        self.worker = self._workers[self.user_id]
         self._fps_hist = []
-        self.registrados_hoy = set()
         self.ultimo_reconocido = defaultdict(lambda: 0)
-        self.directorio_capturas = Path("capturas") / f"usuario_{user_id}"
+        self.directorio_capturas = Path("capturas" if modo == "asistencia" else "capturas_salidas") / f"usuario_{user_id}"
         self.directorio_capturas.mkdir(parents=True, exist_ok=True)
+        self._last_faces = []
     # ───── in-stream FPS suavizado ─────
     def _fps(self, frame_count: int, start_ts: float) -> float:
         fps = frame_count / (time.time() - start_ts + 1e-5)
         self._fps_hist.append(fps)
         self._fps_hist = self._fps_hist[-10:]
         return sum(self._fps_hist) / len(self._fps_hist)
+
     @staticmethod
     def _sanitize_filename(name: str) -> str:
         return "".join(c for c in name if c.isalnum() or c in "-_").rstrip()
-    # ──────────────────────────────
-    #  Detección + reconocimiento
-    # ──────────────────────────────
-    def _infer(self, frame) -> List[dict]:
-        rostros = self.face_app.get(frame)
-        if not rostros:
-            return []
-
-        embeds = np.array([r.embedding for r in rostros], np.float32)
-        faiss.normalize_L2(embeds)
-        D, I = self.index.search(embeds, 1)
-
-        results = []
-
-        for r, d, i in zip(rostros, D.ravel(), I.ravel()):
-            sim = float(d)
-            name = self.nombres[i] if sim >= self._TH_SIMILARITY else "Desconocido"
-
-            x1, y1, x2, y2 = map(int, r.bbox)
-            color = (50, 255, 80) if name != "Desconocido" else (80, 50, 255)
-            color_sec = (20, 180, 20) if name != "Desconocido" else (20, 20, 180)
-
-            # Solo si pasa validación → registrar asistencia y guardar foto
-            if es_rostro_valido(r, frame):
-                rostro_crop = frame[y1:y2, x1:x2]
-                ahora = datetime.now()
-                fecha_str = ahora.strftime("%Y-%m-%d")
-                hora_str = ahora.strftime("%H:%M:%S")
-                estado = "Temprano" if ahora.time() <= dtime(8,10) else "Tarde" if ahora.time() <= dtime(2,30) else "Falto"
-
-                if name != "Desconocido":
-                    if name not in self.registrados_hoy:    
-                        self.registrados_hoy.add(name)
-                        nombre_folder = self.directorio_capturas / self._sanitize_filename(name)
-                        nombre_folder.mkdir(parents=True, exist_ok=True)
-                        nombre_img = f"{self._sanitize_filename(name)}_{fecha_str}_{hora_str.replace(':', '-')}.jpg"
-                        path_img = nombre_folder / nombre_img
-                        cv2.imwrite(str(path_img), rostro_crop)
-
-                        self._registrar_asistencia(
-                            persona_nombre=name,
-                            estado=estado,
-                            tipo="Conocido",
-                            path_foto=str(path_img).replace("\\", "/"),
-                            fecha=fecha_str,
-                            hora=hora_str
-                        )
-                else:
-                    continue
-
-            # Dibujar el recuadro y nombre SIEMPRE (fuera del if, para todos los rostros detectados)
-            dibujar_esquinas(frame, x1, y1, x2, y2, color)
-            dibujar_landmarks(frame, r.bbox, self.face_mesh)
-            cv2.rectangle(frame, (x1, y1 - 35), (x2, y1), color_sec, -1)
-            cv2.rectangle(frame, (x1, y1 - 35), (x2, y1), color, 1)
-            nombre_completo = f"{name} ({sim:.2f})"
-            cv2.putText(frame, nombre_completo, (x1 + 5, y1 - 12),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
-
-            # ✅ Si ya fue registrado hoy, mostrar etiqueta "Registrado"
-            if name != "Desconocido" and name in self.registrados_hoy:
-                cv2.putText(frame, " Registrado", (x1 + 5, y1 - 45),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 255, 0), 2)
-
-            # Retornar el rostro, para frontend
-            # Enviar datos para card
-            foto_path = self.fotos.get(name) if name != "Desconocido" else None
-            registrado = name != "Desconocido" and name in self.registrados_hoy
-            results.append({
-                "bbox": [x1, y1, x2, y2],
-                "nombre": name,
-                "similitud": sim,
-                "foto_path": foto_path,  # Ruta relativa, ej. "usuario_1/juan.jpg"
-                "registrado": registrado  # Para animación
-            })
-
-        return results
 
     # ──────────────────────────────
     #  Bucle de envío
@@ -425,30 +648,150 @@ class RecognitionSession:
 
             # ➜ 1) copia sobre la que dibujaremos
             proc_frame = frame.copy()
-
+            faces = await self.worker.submit(proc_frame)
             # ➜ 2) inferencia en thread-pool **sobre proc_frame**
-            faces = await loop.run_in_executor(
-                None,
-                functools.partial(self._infer, proc_frame)
-            )
+            final_faces = []               # lo que mandaremos al frontend
+            for face in faces:
+                r        = face.pop("r")    # objeto InsightFace
+                name     = face["nombre"]
+                emocion  = face["emocion"]
+                x1, y1, x2, y2 = face["bbox"]
+                if name != "Desconocido":
+                     await self._actualizar_estado_persona(name, emocion, str(self.cam_id))
+                
+
+                color     = (50, 255, 80) if name != "Desconocido" else (80, 50, 255)
+                color_sec = (20, 180, 20) if name != "Desconocido" else (20, 20, 180)
+
+                # ---- validación + registro + guardado ----
+                if es_rostro_valido(r, proc_frame):
+                    ahora = datetime.now()
+                    fecha_str = ahora.strftime("%Y-%m-%d")
+                    hora_str = ahora.strftime("%H:%M:%S")
+                    estado = "Falto"  # Default
+
+                    if name != "Desconocido" and self.modo == "asistencia":
+                        dep_id = self.dep_por_persona.get(name)
+                        if dep_id is not None and dep_id in self.horas_por_departamento:
+                            horas_dep = self.horas_por_departamento[dep_id]
+                            hora_temprano = horas_dep["hora_temprano"]
+                            hora_tarde = horas_dep["hora_tarde"]
+                            ahora_time = ahora.time()
+                            if ahora_time <= hora_temprano:
+                                estado = "Temprano"
+                            elif ahora_time <= hora_tarde:
+                                estado = "Tarde"
+                            else:
+                                estado = "Falto"
+                        else:
+                            # Fallback si no hay dep o caché
+                            estado = ("Temprano" if ahora.time() <= dtime(8,10) else "Tarde" if ahora.time() <= dtime(14,30) else "Falto")
+
+                    if name != "Desconocido" and name not in self._registrados_hoy[self.user_id] and self.modo != "normal":
+                        self._registrados_hoy[self.user_id].add(name)
+
+                        # guardar recorte
+                        folder = self.directorio_capturas / self._sanitize_filename(name)
+                        folder.mkdir(parents=True, exist_ok=True)
+                        fname  = f"{self._sanitize_filename(name)}_{fecha_str}_{hora_str.replace(':','-')}.jpg"
+                        path   = folder / fname
+                        cv2.imwrite(str(path), proc_frame[y1:y2, x1:x2])
+
+                        # registrar en BD
+                        if self.modo == "asistencia":
+                            self._registrar_asistencia(
+                                persona_nombre=name,
+                                estado=estado,
+                                tipo="Conocido",
+                                path_foto=str(path).replace("\\", "/"),
+                                fecha=fecha_str,
+                                hora=hora_str
+                            )
+                        elif self.modo == "salida":
+                            self._registrar_salida(
+                                persona_nombre=name,
+                                path_foto=str(path).replace("\\", "/"),
+                                fecha=fecha_str,
+                                hora=hora_str
+                            )
+
+                # ---- dibujos siempre ----
+                dibujar_esquinas(proc_frame, x1, y1, x2, y2, color)
+                dibujar_landmarks(proc_frame, (x1,y1,x2,y2), self.face_mesh)
+                cv2.rectangle(proc_frame, (x1, y1 - 35), (x2, y1), color_sec, -1)
+                cv2.rectangle(proc_frame, (x1, y1 - 35), (x2, y1), color, 1)
+                cv2.putText(proc_frame, f"{name} ({emocion})", (x1+5, y1-12),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255,255,255), 1)
+                if name != "Desconocido" and name in self._registrados_hoy[self.user_id]:
+                    cv2.putText(proc_frame, " Registrado", (x1+5, y1-45),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0,255,0), 2)
+
+                # ---- info para frontend ----
+                face["foto_path"]  = self.fotos.get(name) if name!="Desconocido" else None
+                face["registrado"] = name!="Desconocido" and name in self._registrados_hoy[self.user_id]
+                final_faces.append(face)
+                
+            # Calcula summary
+            summary = {
+                "emociones_conteo": {},
+                "dominante_por_camara": "",
+                "tendencia": "",
+                "personalizados": {},  # e.g., "Juan": "Happy"
+                "visitantes": {},  # Conteo emociones desconocidos
+                "personas_por_area": {},  # Nueva: conteo personas conocidas por cámara
+                "visitantes_por_area": {}  # Nueva: conteo visitantes por cámara
+            }
+
+            # Conteo current emociones
+            for face in final_faces:
+                emocion = face["emocion"]
+                name = face["nombre"]
+                summary["emociones_conteo"][emocion] = summary["emociones_conteo"].get(emocion, 0) + 1
+                if name == "Desconocido":
+                    summary["visitantes"][emocion] = summary["visitantes"].get(emocion, 0) + 1
+                else:
+                    summary["personalizados"][name] = emocion  # Última emoción
+
+            # Dominante por cámara
+            if summary["emociones_conteo"]:
+                dominante = max(summary["emociones_conteo"], key=summary["emociones_conteo"].get)
+                count = summary["emociones_conteo"][dominante]
+                summary["dominante_por_camara"] = f"{dominante} ({count} personas)"
+
+            # Tendencias (últimos 5 frames)
+            self._last_faces.append(final_faces)
+            self._last_faces = self._last_faces[-5:]
+            all_emoc = [f["emocion"] for faces in self._last_faces for f in faces if f["nombre"] != "Desconocido"]
+            if all_emoc:
+                dominante_tend = max(set(all_emoc), key=all_emoc.count)
+                percent = (all_emoc.count(dominante_tend) / len(all_emoc)) * 100
+                summary["tendencia"] = f"{dominante_tend} ({percent:.0f}%)"
+
+            # Nuevos campos para localización (por esta cámara)
+            cam_key = f"camara_{self.cam_id}"
+            summary["personas_por_area"][cam_key] = len([f for f in final_faces if f["nombre"] != "Desconocido"])
+            summary["visitantes_por_area"][cam_key] = len([f for f in final_faces if f["nombre"] == "Desconocido"])
 
             # ➜ 3) codificamos **proc_frame** (ya tiene rectángulos)
             _, buf = cv2.imencode(".jpg", proc_frame, self._JPEG_PARAMS)
             b64 = base64.b64encode(buf).decode()
 
-            await ws.send_json({
-                "type"     : "frame",
-                "frame"    : b64,
-                "faces"    : faces,
+            await ws.send_json({                       # 2️⃣
+                "type": "frame",
+                "frame": b64,
+                "faces": final_faces,
                 "fps"      : self._fps(frame_cnt, t0),
-                "timestamp": time.time()
+                "timestamp": time.time(),
+                "camara_id": self.cam_id,
+                "summary": summary  # Incluye los nuevos campos
             })
             frame_cnt += 1
             await asyncio.sleep(0)   
-
+        
     # ──────────────────────────────
     async def close(self):
-        self.cam.stop()
-        # ➋ liberar cache para que un próximo “Iniciar” recargue
+        VideoManager.release(self.cam_id)  # Libera cámara
+        if self.user_id in self._workers:
+            # Opcional: si quieres limpiar worker, pero solo si no hay otras sesiones
+            del self._workers[self.user_id]
         self._models.pop(self.user_id, None)
-    

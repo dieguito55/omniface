@@ -1,3 +1,4 @@
+#omniface-backend/asistencia.py
 from fastapi import APIRouter, HTTPException
 import mysql.connector
 from mysql.connector import Error
